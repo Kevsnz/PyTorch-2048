@@ -1,7 +1,9 @@
 import random
 import numpy as np
 
+
 class Game2048:
+    target_score = 11 # 2 ** 11 = 2048
 
     def __init__(self):
         self.numbers = [0, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
@@ -63,8 +65,10 @@ class Game2048:
     def sweepRight(self, i, j):
         if j == 3:
             return
+
         if self.board[i][j] == 0:
             return
+
         if self.board[i][j+1] == 0:
             self.board[i][j+1] = self.board[i][j]
             self.board[i][j] = 0
@@ -72,6 +76,10 @@ class Game2048:
         elif self.board[i][j+1] == self.board[i][j]:
             self.board[i][j+1] = self.board[i][j] + 1
             self.board[i][j] = 0
+
+            if self.score < self.board[i][j+1]:
+                self.score = self.board[i][j+1]
+            
             self.sweepRight(i, j+1)
 
 
