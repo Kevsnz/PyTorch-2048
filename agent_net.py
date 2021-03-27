@@ -12,7 +12,7 @@ class AgentNet(torch.nn.Module):
     
     # input: 4x4 board with 12 layers, output: direction of swipe
     def forward(self, x):
-        x = F.relu(self.L1(x.flatten()))
+        x = F.relu(self.L1(torch.flatten(x)))
         x = torch.sigmoid(self.L2(x))
         return x
     

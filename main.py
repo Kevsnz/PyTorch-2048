@@ -1,6 +1,22 @@
 from game import Game2048
 import random
 
+def silentPlayout(game):
+    turn = 0
+
+    while True:
+        try:
+            game.placeNewNumber()
+        except Exception:
+            return turn, False
+        
+        turn += 1
+        dir = random.randint(0,3)
+        game.swipe(dir)
+        if game.score == game.target_score:
+            return turn, True
+
+
 if __name__ == '__main__':
     print('Welcome!')
 
@@ -8,22 +24,13 @@ if __name__ == '__main__':
 
     game = Game2048()
 
-    for i in range(1024):
-        print(f'{i+1}: Placing new number...')
+    for i in range(150):
+        game.reset()
+        turns, won = silentPlayout(game)
 
-        try:
-            game.placeNewNumber()
-        except Exception:
-            print('No space for new number. Game Over!')
-            break
-
-        print(game.boardAsString())
-
-        dir = random.randint(0,3)
-        print(f'{i+1}: Swiping {dirs[dir]}...')
-        game.swipe(dir)
-        print(game.boardAsString())
-        if game.score == game.target_score:
-            print('Target score reached. Victory!')
+        if won:
+            print(f'Victory! Target score reached after {turns} turns.')
+        else:
+            print(f'Game Over! No space for new number after {turns} turns.')
     
     print('Done!')
