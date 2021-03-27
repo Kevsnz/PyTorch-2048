@@ -39,7 +39,8 @@ class Game2048:
         return freePlaces[idx][0], freePlaces[idx][1]
     
 
-    def swipe(self, dir): # 0 - left, 1 - up, 2 - right, 3 - down
+    # 0 - left, 1 - up, 2 - right, 3 - down
+    def swipe(self, dir):
         # Flip the board around so the direction needed for the swipe points to the right
         if dir == 0:
             self.board = np.fliplr(self.board)
@@ -48,10 +49,11 @@ class Game2048:
         elif dir == 3:
             self.board = self.board.transpose()
 
+        turnScore = 0
         # Do the swipe to the right
         for i in range(0, 4): # each line
             for j in range(2, -1, -1): # from right to left
-                self.sweepRight(i, j) # sweep to the right
+                turnScore += self.sweepRight(i, j) # sweep to the right
 
         # Unflip board back to original orientation
         if dir == 0:
@@ -60,27 +62,32 @@ class Game2048:
             self.board = np.fliplr(self.board).transpose()
         elif dir == 3:
             self.board = self.board.transpose()
+        
+        return turnScore
 
 
     def sweepRight(self, i, j):
         if j == 3:
-            return
+            return 0
 
         if self.board[i][j] == 0:
-            return
+            return 0
 
         if self.board[i][j+1] == 0:
             self.board[i][j+1] = self.board[i][j]
             self.board[i][j] = 0
-            self.sweepRight(i, j+1)
-        elif self.board[i][j+1] == self.board[i][j]:
+            return self.sweepRight(i, j+1)
+
+        if self.board[i][j+1] == self.board[i][j]:
             self.board[i][j+1] = self.board[i][j] + 1
             self.board[i][j] = 0
 
             if self.score < self.board[i][j+1]:
                 self.score = self.board[i][j+1]
             
-            self.sweepRight(i, j+1)
+            return self.board[i][j+1] + self.sweepRight(i, j+1)
+        
+        return 0
 
 
     def boardAsString(self):
