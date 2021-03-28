@@ -11,17 +11,20 @@ class Game2048:
     
 
     def reset(self):
-        self.board = np.zeros(16).reshape(4, 4) # [row][col]
+        self.board = np.zeros(16, dtype=np.int16).reshape(4, 4) # [row][col]
         self.score = 0
+        self.placeNewNumber()
     
 
+    # Returns whether game is over (no space for new number)
     def placeNewNumber(self):
         i, j = self.getFreePlace()
 
         if i == None or j == None:
-            raise Exception('No free space left!')
+            return True
 
         self.board[i][j] = 1
+        return False
     
 
     def getFreePlace(self):
@@ -33,7 +36,7 @@ class Game2048:
                     freePlaces.append([i, j])
         
         if len(freePlaces) == 0:
-            return
+            return None, None
         
         idx = random.randint(0, len(freePlaces)-1)
         return freePlaces[idx][0], freePlaces[idx][1]
@@ -63,7 +66,9 @@ class Game2048:
         elif dir == 3:
             self.board = self.board.transpose()
         
-        return turnScore
+        if self.score == self.target_score:
+            return turnScore, True
+        return turnScore, self.placeNewNumber()
 
 
     def sweepRight(self, i, j):

@@ -39,7 +39,8 @@ def TestGame():
                 [0, 0, 0, 0],
                 [0, 0, 0, 0],
                 [0, 0, 0, 0]],
-            'score': 0
+            'score': 0,
+            'ended': False
         },
         {
             'board':[
@@ -47,7 +48,8 @@ def TestGame():
                 [0, 2, 0, 0],
                 [0, 0, 0, 0],
                 [0, 0, 0, 0]],
-            'score': 0
+            'score': 0,
+            'ended': False
         },
         {
             'board':[
@@ -55,7 +57,8 @@ def TestGame():
                 [0, 1, 0, 1],
                 [0, 0, 0, 0],
                 [0, 0, 0, 0]],
-            'score': 2
+            'score': 2,
+            'ended': False
         },
         {
             'board':[
@@ -63,7 +66,8 @@ def TestGame():
                 [0, 1, 1, 2],
                 [0, 0, 0, 0],
                 [0, 0, 0, 0]],
-            'score': 5
+            'score': 5,
+            'ended': False
         },
         {
             'board':[
@@ -71,7 +75,8 @@ def TestGame():
                 [1, 0, 1, 2],
                 [0, 0, 0, 0],
                 [0, 0, 0, 0]],
-            'score': 5
+            'score': 5,
+            'ended': False
         },
         {
             'board':[
@@ -79,7 +84,26 @@ def TestGame():
                 [1, 0, 1, 2],
                 [2, 0, 2, 3],
                 [0, 0, 0, 0]],
-            'score': 12
+            'score': 12,
+            'ended': False
+        },
+        {
+            'board':[
+                [1, 2, 3, 4],
+                [1, 2, 3, 4],
+                [1, 2, 3, 4],
+                [1, 2, 3, 4]],
+            'score': 0,
+            'ended': True
+        },
+        {
+            'board':[
+                [0, 0, 0, 0],
+                [0,10, 0,10],
+                [0, 0, 0, 0],
+                [0, 0, 0, 0]],
+            'score': 11,
+            'ended': True
         },
     ]
 
@@ -89,9 +113,9 @@ def TestGame():
         case = cases[i]
         game.reset()
         game.board = np.array(case['board'])
-        score = game.swipe(2)
-        if score != case['score']:
-            print(f'FAIL: Test {i}, got: {score}, expected {case["score"]}')
+        score, ended = game.swipe(2)
+        if score != case['score'] or ended != case['ended']:
+            print(f'FAIL: Test {i}, got: {score} ({ended}), expected {case["score"]} ({case["ended"]})')
             print(game.boardAsString())
             fails += 1
         else:
