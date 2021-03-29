@@ -17,8 +17,9 @@ class AgentPlayer:
         actions = []
         rewards = []
         endeds = []
+        newStates = []
         while True:
-            s, a, r, e = self.makeTurn(self.net, self.game, eps)
+            s, a, r, e, s1 = self.makeTurn(self.net, self.game, eps)
 
             if e:
                 r += self.game.score
@@ -27,23 +28,27 @@ class AgentPlayer:
             actions.append(a)
             rewards.append(r)
             endeds.append(e)
+            newStates.append(s1)
 
             if e:
                 break
             
-        return states, actions, rewards, endeds
+        return states, actions, rewards, endeds, newStates
     
 
     def makeTurn(self, net: AgentNet, game: Game2048, eps: float):
-        state = net.prepareInput(game.board)
-        action = net(state)
+        state = game.board
 
         if np.random.rand() < eps:
             dir = np.random.randint(4)
         else:
-            actionProb = torch.softmax(action, dim=0)
-            dir = np.random.choice(range(0, 4), 1, p=actionProb.cpu().detach().numpy())
+            action = net(net.prepareInput(state))
+            dir = torch.argmax(action).item()
+            pass
+            #actionProb = torch.softmax(action, dim=0)
+            #dir = np.random.choice(range(0, 4), 1, p=actionProb.cpu().detach().numpy())
         
         reward, ended = game.swipe(dir)
-        return state, action, reward, ended
+        newState = game.board
+        return state, dir, reward, ended, newState
 
