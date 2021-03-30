@@ -2,17 +2,22 @@ from game import Game2048
 from agent_net import AgentNet
 from agent_player import AgentPlayer
 from experience_buffer import ExperienceBuffer
+from tensorboardX import SummaryWriter
 import random
 import time
 import torch
+import datetime
+import os
+import tensorboard
 
 exp_capacity = 100000
 epsilon_initial = 1.0
 epsilon_final = 0.02
-epsilon_decay_time = 500000
+epsilon_decay_time = 1000000
 epsilon_decay_amount = epsilon_initial - epsilon_final
-initial_exp_gathering = 5000
+initial_exp_gathering = 10000
 batch_size = 16
+epochs = 8
 gamma = 0.95
 
 def silentPlayout(game):
@@ -54,6 +59,8 @@ def playAndLearn(agentNet, targetNet, player):
     expBuffer = ExperienceBuffer(exp_capacity)
     device = AgentNet.device
 
+    writer = SummaryWriter(logdir=os.path.join('tensorboard', datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')))
+
     reportInterval = 5000
 
     sampleCount = 0
@@ -87,6 +94,12 @@ def playAndLearn(agentNet, targetNet, player):
                 timeCur = time.perf_counter()
                 speed = reportInterval / (timeCur - timeLast)
                 timeLast = timeCur
+
+                if sampleCount >= initial_exp_gathering:
+                    writer.add_scalar('Eps', epsilon, sampleCount)
+                    writer.add_scalar('Speed', speed, sampleCount)
+                    writer.add_scalar('Episode Length', stepCount/epCount, sampleCount)
+
                 print(f'Played {sampleLast} steps ({episodeCount} episodes) ({speed} samples/s): Average step count {stepCount/epCount}')
                 stepCount = 0
                 epCount = 0
@@ -94,31 +107,34 @@ def playAndLearn(agentNet, targetNet, player):
             if sampleCount < initial_exp_gathering:
                 continue
 
-            states, actions, rewards, terms, newStates = expBuffer.sample(batch_size)
-            states_t = agentNet.prepareInputs(states) #torch.Tensor(agentNet.prepareInput(s) for s in states).to(device)
-            newStates_t = agentNet.prepareInputs(newStates) #torch.Tensor([agentNet.prepareInput(s) for s in newStates]).to(device)
-            actions_t = torch.tensor(actions, dtype=torch.int64).to(device)
-            rewards_t = torch.tensor(rewards).to(device)
-            terms_t = torch.tensor(terms, dtype=torch.bool).to(device)
+            for _ in range(epochs):
+                states, actions, rewards, terms, newStates = expBuffer.sample(batch_size)
+                states_t = agentNet.prepareInputs(states) #torch.Tensor(agentNet.prepareInput(s) for s in states).to(device)
+                newStates_t = agentNet.prepareInputs(newStates) #torch.Tensor([agentNet.prepareInput(s) for s in newStates]).to(device)
+                actions_t = torch.tensor(actions, dtype=torch.int64).to(device)
+                rewards_t = torch.tensor(rewards).to(device)
+                terms_t = torch.tensor(terms, dtype=torch.bool).to(device)
 
-            stateActionQs = agentNet(states_t)
-            stateActionQs = torch.gather(stateActionQs, 1, actions_t.unsqueeze(-1)).squeeze(-1)
+                stateActionQs = agentNet(states_t)
+                stateActionQs = torch.gather(stateActionQs, 1, actions_t.unsqueeze(-1)).squeeze(-1)
 
-            q1_t = targetNet(newStates_t).max(1)[0]
-            q1_t[terms_t] = 0.0
-            rewards_t = q1_t.detach() * gamma + rewards_t
-            loss = lossFunc(stateActionQs, rewards_t)
+                q1_t = targetNet(newStates_t).max(1)[0]
+                q1_t[terms_t] = 0.0
+                rewards_t = q1_t.detach() * gamma + rewards_t
+                loss = lossFunc(stateActionQs, rewards_t)
 
-            optim.zero_grad()
-            loss.backward()
-            optim.step()
+                optim.zero_grad()
+                loss.backward()
+                optim.step()
 
-            if episodeCount % 5 == 4:
-                targetNet.load_state_dict(agentNet.state_dict())
+                if episodeCount % 5 == 4:
+                    targetNet.load_state_dict(agentNet.state_dict())
 
 
     except KeyboardInterrupt:
         print(f'Playing stopped after {sampleCount} steps ({episodeCount} episodes).')
+    
+    writer.close()
 
 
 if __name__ == '__main__':
