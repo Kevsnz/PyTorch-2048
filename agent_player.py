@@ -1,7 +1,6 @@
 from agent_net import AgentNet
 from game import Game2048
 import torch
-import torch.functional as F
 import numpy as np
 
 class AgentPlayer:
@@ -21,9 +20,6 @@ class AgentPlayer:
         while True:
             s, a, r, e, s1 = self.makeTurn(self.net, self.game, eps)
 
-            if e:
-                r += self.game.score
-
             states.append(s)
             actions.append(a)
             rewards.append(r)
@@ -42,11 +38,8 @@ class AgentPlayer:
         if np.random.rand() < eps:
             dir = np.random.randint(4)
         else:
-            action = net(net.prepareInput(state))
+            action = net(net.prepareInputs(state))
             dir = torch.argmax(action).item()
-            pass
-            #actionProb = torch.softmax(action, dim=0)
-            #dir = np.random.choice(range(0, 4), 1, p=actionProb.cpu().detach().numpy())
         
         reward, ended = game.swipe(dir)
         newState = game.board
