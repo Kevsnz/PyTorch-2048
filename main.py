@@ -173,6 +173,31 @@ def playAndLearn(agentNet, targetNet, player):
     writer.close()
 
 
+def playThroughStdin(game: Game2048):
+    # 0 - left, 1 - up, 2 - right, 3 - down
+    directions = { 'W': 1, 'S': 3, 'A': 0, 'D': 2}
+
+    game.reset()
+    moveCount = 0
+
+    try:
+        while True:
+            print(game.boardAsString())
+            inStr = input('Enter direction of swipe: ')
+            dir = directions[inStr.upper()]
+            score, ended = game.swipe(dir)
+            moveCount += 1
+
+            if ended:
+                print(f'Game Over. Score: {2**game.score} after {moveCount} turns.')
+                return
+            else:
+                print(f'Swipe #{moveCount} gave {score} points.')
+        
+    except KeyboardInterrupt:
+        print('Game aborted.')
+
+
 if __name__ == '__main__':
     print('Welcome!')
 
@@ -180,6 +205,8 @@ if __name__ == '__main__':
 
     game = Game2048()
     # playSomeRandomGames(game)
+    playThroughStdin(game)
+    exit()
 
     agentNet = AgentNet()
     targetNet = AgentNet()
@@ -187,6 +214,6 @@ if __name__ == '__main__':
 
     # playAndPrintEpisode(player)
 
-    playAndLearn(agentNet, targetNet, player)
+    # playAndLearn(agentNet, targetNet, player)
     
     print('Done!')
