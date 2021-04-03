@@ -19,6 +19,9 @@ class Game2048:
         self.placeNewNumber()
         self.placeNewNumber()
     
+    def clearMergeBoard(self):
+        self.mergeBoard = np.zeros(16, dtype=np.bool8).reshape(4, 4)
+    
 
     # Returns whether game is over (no space for new number)
     def placeNewNumber(self):
@@ -28,7 +31,7 @@ class Game2048:
             return True
 
         self.board[i][j] = 2 if random.random() < self.FOUR_PROBABILITY else 1
-        return False
+        return not self.isValidSwipesAvailable()
     
 
     def getFreePlace(self):
@@ -46,7 +49,23 @@ class Game2048:
         return freePlaces[idx][0], freePlaces[idx][1]
     
 
-    # 0 - left, 1 - up, 2 - right, 3 - down
+    def isValidSwipesAvailable(self):
+        for i in range(4):
+            for j in range(4):
+                if self.board[i][j] == 0:
+                    return True
+
+                if i < 3 and self.board[i][j] == self.board[i+1][j]:
+                    return True
+                
+                if j < 3 and self.board[i][j] == self.board[i][j+1]:
+                    return True
+        
+        return False
+
+    
+    # dir: 0 - left, 1 - up, 2 - right, 3 - down
+    # Returns swipe score, whether the game is ended and whether swipe is valid
     def swipe(self, dir):
         # Flip the board around so the direction needed for the swipe points to the right
         if dir == 0:
@@ -58,6 +77,7 @@ class Game2048:
 
         turnScore = 0
         isValidMove = False
+        self.clearMergeBoard()
         # Do the swipe to the right
         for i in range(0, 4): # each line
             for j in range(2, -1, -1): # from right to left
@@ -99,15 +119,18 @@ class Game2048:
             score, _ = self.sweepRight(i, j+1)
             return score, True
 
-        if self.board[i][j+1] == self.board[i][j]:
+        if self.board[i][j+1] == self.board[i][j] and not self.mergeBoard[i][j+1]:
             self.board[i][j+1] = self.board[i][j] + 1
             self.board[i][j] = 0
+            self.mergeBoard[i][j+1] = True
 
             if self.score < self.board[i][j+1]:
                 self.score = self.board[i][j+1]
             
-            score, _ = self.sweepRight(i, j+1)
-            return self.board[i][j+1] + score, True
+            score = self.board[i][j+1]
+            #score2, _ = self.sweepRight(i, j+1)
+            #return score + score2, True
+            return score, True
         
         return 0, False
 
