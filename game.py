@@ -3,7 +3,8 @@ import numpy as np
 
 
 class Game2048:
-    target_score = 11 # 2 ** 11 = 2048
+    TARGET_SCORE = 11 # 2 ** 11 = 2048
+    FOUR_PROBABILITY = 0.1
 
     def __init__(self):
         self.numbers = [0, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
@@ -23,7 +24,7 @@ class Game2048:
         if i == None or j == None:
             return True
 
-        self.board[i][j] = 1
+        self.board[i][j] = 2 if random.random() < self.FOUR_PROBABILITY else 1
         return False
     
 
@@ -66,7 +67,7 @@ class Game2048:
         elif dir == 3:
             self.board = self.board.transpose()
         
-        if self.score == self.target_score:
+        if self.score == self.TARGET_SCORE:
             return turnScore, True
         
         gameOver = self.placeNewNumber()
