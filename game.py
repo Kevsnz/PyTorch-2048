@@ -68,7 +68,11 @@ class Game2048:
         
         if self.score == self.target_score:
             return turnScore, True
-        return turnScore, self.placeNewNumber()
+        
+        gameOver = self.placeNewNumber()
+        if gameOver:
+            return -11, True
+        return turnScore, False
 
 
     def sweepRight(self, i, j):
