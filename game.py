@@ -19,6 +19,7 @@ class Game2048:
         self.placeNewNumber()
         self.placeNewNumber()
     
+    
     def clearMergeBoard(self):
         self.mergeBoard = np.zeros(16, dtype=np.bool8).reshape(4, 4)
     

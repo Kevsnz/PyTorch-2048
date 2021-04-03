@@ -1,7 +1,7 @@
 from agent_net import AgentNet
 from game import Game2048
 import torch
-import numpy as np
+import random
 
 class AgentPlayer:
     def __init__(self, net: AgentNet, game: Game2048):
@@ -33,15 +33,22 @@ class AgentPlayer:
     
 
     def makeTurn(self, net: AgentNet, game: Game2048, eps: float):
-        state = game.board
+        state = game.board.copy()
 
-        if np.random.rand() < eps:
-            dir = np.random.randint(4)
+        if random.random() < eps:
+            valid = False
+            moves = [0, 1, 2, 3]
+            while not valid:
+                dir = moves[random.randrange(len(moves))]
+                reward, ended, valid = game.swipe(dir)
+                moves.remove(dir)
         else:
-            action = net(net.prepareInputs(state))
-            dir = torch.argmax(action).item()
+            action = net(net.prepareInputs(state)).squeeze(0)
+            valid = False
+            while not valid:
+                dir = torch.argmax(action).item()
+                reward, ended, valid = game.swipe(dir)
+                action[dir] = torch.min(action) - 0.1
         
-        reward, ended, valid = game.swipe(dir)
-        newState = game.board
-        return state, dir, reward, ended, newState
+        return state, dir, reward, ended, game.board.copy()
 

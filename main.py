@@ -29,7 +29,7 @@ def silentPlayout(game):
 
     while True:
         turn += 1
-        dir = random.randint(0,3)
+        dir = random.randrange(4)
         _, ended, _ = game.swipe(dir)
         if ended:
             if game.score == game.target_score:
@@ -49,14 +49,13 @@ def playSomeRandomGames(game):
             print(f'Game Over! No space for new number after {turns} turns (final score: {2**score}).')
 
 
-def playAndPrintEpisode(player):
-    s, a, r, e, _ = player.playEpisode()
+def playAndPrintEpisode(player, eps = 0.1):
+    s, a, r, e, _ = player.playEpisode(eps)
 
     for i in range(0,len(s)):
-        print(f'State: {s[i]}')
-        print(f'Action: {a[i]}')
-        print(f'Reward: {r[i]}')
-        print(f'Ended: {e[i]}')
+        print(f'#{i} State:')
+        print(f'{s[i]}')
+        print(f'Action: {a[i]}, Reward: {r[i]}, Ended: {e[i]}')
 
 
 def playSomeGames(game, net, count):
@@ -125,7 +124,7 @@ def playAndLearn(agentNet, targetNet, player):
                     if epochs > 0:
                         writer.add_scalar('Training/Loss', lossAvg/epochs, sampleCount)
 
-                print(f'Played {sampleLast} steps ({episodeCount} episodes) ({speed} samples/s): Average step count {stepCount/epCount}, Evaluation score {evalScore}')
+                print(f'Played {sampleLast} steps ({episodeCount} episodes) ({speed:8.2f} samples/s): Average step count {stepCount/epCount:7.2f}, Evaluation score {evalScore:4.1f}')
                 stepCount = 0
                 epCount = 0
                 epochs = 0
@@ -210,8 +209,8 @@ if __name__ == '__main__':
 
     game = Game2048()
     # playSomeRandomGames(game)
-    playThroughStdin(game)
-    exit()
+    # playThroughStdin(game)
+    # exit()
 
     agentNet = AgentNet()
     targetNet = AgentNet()
@@ -219,6 +218,6 @@ if __name__ == '__main__':
 
     # playAndPrintEpisode(player)
 
-    # playAndLearn(agentNet, targetNet, player)
+    playAndLearn(agentNet, targetNet, player)
     
     print('Done!')
