@@ -7,13 +7,16 @@ class Game2048:
     FOUR_PROBABILITY = 0.1
 
     def __init__(self):
-        self.numbers = [0, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
+        self.numbers = [0]
+        for i in range(self.TARGET_SCORE):
+            self.numbers.append(2**(i+1))
         self.reset()
     
 
     def reset(self):
         self.board = np.zeros(16, dtype=np.int16).reshape(4, 4) # [row][col]
         self.score = 0
+        self.placeNewNumber()
         self.placeNewNumber()
     
 
@@ -54,10 +57,13 @@ class Game2048:
             self.board = self.board.transpose()
 
         turnScore = 0
+        isValidMove = False
         # Do the swipe to the right
         for i in range(0, 4): # each line
             for j in range(2, -1, -1): # from right to left
-                turnScore += self.sweepRight(i, j) # sweep to the right
+                score, valid = self.sweepRight(i, j) # sweep to the right
+                turnScore += score
+                isValidMove = isValidMove or valid
 
         # Unflip board back to original orientation
         if dir == 0:
@@ -67,26 +73,31 @@ class Game2048:
         elif dir == 3:
             self.board = self.board.transpose()
         
+        if not isValidMove:
+            return 0, False, False
+
         if self.score == self.TARGET_SCORE:
-            return turnScore, True
+            return turnScore, True, True
         
         gameOver = self.placeNewNumber()
         if gameOver:
-            return -11, True
-        return turnScore, False
+            return -11, True, True
+        return turnScore, False, True
 
 
+    # Returns score addition as a result of a tile move and if there was a board change
     def sweepRight(self, i, j):
         if j == 3:
-            return 0
+            return 0, False
 
         if self.board[i][j] == 0:
-            return 0
+            return 0, False
 
         if self.board[i][j+1] == 0:
             self.board[i][j+1] = self.board[i][j]
             self.board[i][j] = 0
-            return self.sweepRight(i, j+1)
+            score, _ = self.sweepRight(i, j+1)
+            return score, True
 
         if self.board[i][j+1] == self.board[i][j]:
             self.board[i][j+1] = self.board[i][j] + 1
@@ -95,9 +106,10 @@ class Game2048:
             if self.score < self.board[i][j+1]:
                 self.score = self.board[i][j+1]
             
-            return self.board[i][j+1] + self.sweepRight(i, j+1)
+            score, _ = self.sweepRight(i, j+1)
+            return self.board[i][j+1] + score, True
         
-        return 0
+        return 0, False
 
 
     def boardAsString(self):

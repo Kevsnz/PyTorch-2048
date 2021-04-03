@@ -41,7 +41,7 @@ class AgentPlayer:
             action = net(net.prepareInputs(state))
             dir = torch.argmax(action).item()
         
-        reward, ended = game.swipe(dir)
+        reward, ended, valid = game.swipe(dir)
         newState = game.board
         return state, dir, reward, ended, newState
 

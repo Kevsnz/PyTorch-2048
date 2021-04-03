@@ -30,7 +30,7 @@ def silentPlayout(game):
     while True:
         turn += 1
         dir = random.randint(0,3)
-        _, ended = game.swipe(dir)
+        _, ended, _ = game.swipe(dir)
         if ended:
             if game.score == game.target_score:
                 return turn, game.score, True
@@ -185,7 +185,12 @@ def playThroughStdin(game: Game2048):
             print(game.boardAsString())
             inStr = input('Enter direction of swipe: ')
             dir = directions[inStr.upper()]
-            score, ended = game.swipe(dir)
+            score, ended, valid = game.swipe(dir)
+
+            if not valid:
+                print('Invalid move, try again...')
+                continue
+
             moveCount += 1
 
             if ended:
