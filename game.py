@@ -16,6 +16,7 @@ class Game2048:
     def reset(self):
         self.board = np.zeros(16, dtype=np.int16).reshape(4, 4) # [row][col]
         self.score = 0
+        self.totalScore = 0
         self.placeNewNumber()
         self.placeNewNumber()
     
@@ -85,6 +86,8 @@ class Game2048:
                 score, valid = self.sweepRight(i, j) # sweep to the right
                 turnScore += score
                 isValidMove = isValidMove or valid
+
+        self.totalScore += turnScore
 
         # Unflip board back to original orientation
         if dir == 0:
