@@ -1,4 +1,5 @@
 import numpy as np
+import collections
 
 class ExperienceBuffer:
     def __init__(self, capacity):
@@ -7,11 +8,11 @@ class ExperienceBuffer:
 
 
     def clear(self):
-        self.stateBuffer = []
-        self.actionBuffer = []
-        self.rewardBuffer = []
-        self.termBuffer = []
-        self.newStateBuffer = []
+        self.stateBuffer = collections.deque(maxlen=self.capacity)
+        self.actionBuffer = collections.deque(maxlen=self.capacity)
+        self.rewardBuffer = collections.deque(maxlen=self.capacity)
+        self.termBuffer = collections.deque(maxlen=self.capacity)
+        self.newStateBuffer = collections.deque(maxlen=self.capacity)
 
 
     def add(self, states, actions, rewards, terms, newStates):
@@ -21,25 +22,11 @@ class ExperienceBuffer:
         self.termBuffer.extend(terms)
         self.newStateBuffer.extend(newStates)
 
-        if len(self.stateBuffer) > self.capacity:
-            self.stateBuffer = self.stateBuffer[-self.capacity:]
-            self.actionBuffer = self.actionBuffer[-self.capacity:]
-            self.rewardBuffer = self.rewardBuffer[-self.capacity:]
-            self.termBuffer = self.termBuffer[-self.capacity:]
-            self.newStateBuffer = self.newStateBuffer[-self.capacity:]
-
 
     def sample(self, count):
         idxs = np.random.choice(len(self.stateBuffer), size=count, replace=False)
 
-        # states = self.stateBuffer[idxs]
-        # actions = self.actionBuffer[idxs]
-        # rewards = self.rewardBuffer[idxs]
-        # terms = self.termBuffer[idxs]
-        # newStates = self.newStateBuffer[idxs]
-
-        states, actions, rewards, terms, newStates = zip(*
-            [(self.stateBuffer[i], self.actionBuffer[i], self.rewardBuffer[i], self.termBuffer[i], self.newStateBuffer[i]) for i in idxs])
+        states, actions, rewards, terms, newStates = zip(*[(self.stateBuffer[i], self.actionBuffer[i], self.rewardBuffer[i], self.termBuffer[i], self.newStateBuffer[i]) for i in idxs])
         
         return np.array(states), \
             np.array(actions), \
