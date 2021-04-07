@@ -29,7 +29,7 @@ class ExperienceBuffer:
         states, actions, rewards, terms, newStates = zip(*[(self.stateBuffer[i], self.actionBuffer[i], self.rewardBuffer[i], self.termBuffer[i], self.newStateBuffer[i]) for i in idxs])
         
         return np.array(states), \
-            np.array(actions), \
+            np.array(actions, dtype=np.int64), \
             np.array(rewards, dtype=np.float32), \
-            np.array(terms, dtype=np.uint8), \
+            np.array(terms, dtype=np.bool8), \
             np.array(newStates)
