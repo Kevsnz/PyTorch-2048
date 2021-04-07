@@ -13,14 +13,14 @@ exp_capacity = 10000
 initial_exp_gathering = 2000
 targetSyncInterval = 3000
 
-epsilon_initial = 1.0
-epsilon_final = 0.01
-epsilon_decay_time = 200000
+epsilon_initial = 1
+epsilon_final = 0.02
+epsilon_decay_time = 1000000
 epsilon_decay_amount = epsilon_initial - epsilon_final
 
 batch_size = 32
-gamma = 0.98
-learningRate = 0.001
+gamma = 0.99
+learningRate = 0.0005
 
 EVAL_GAMES = 10
 
@@ -51,22 +51,35 @@ def playSomeRandomGames(game):
 
 def playAndPrintEpisode(player, eps = 0.1):
     s, a, r, e, _ = player.playEpisode(eps)
+    game = player.game
 
     for i in range(0,len(s)):
         print(f'#{i} State:')
         print(f'{s[i]}')
-        print(f'Action: {a[i]}, Reward: {r[i]}, Ended: {e[i]}')
+        print(f'Action: {a[i]} ({game.MOVE_STRING[a[i]]}), Reward: {r[i]}, Ended: {e[i]}')
+    
+    print(f'Final score: {game.totalScore}')
 
 
 def playSomeGames(game, net, count):
     agent = AgentPlayer(net, game)
 
     avgScore = 0
+    maxScore = 0
+    minScore = game.TARGET_SCORE + 1
+    avgTotal = 0
+    minTotal = 2**30
+    maxTotal = 0
     for i in range(count):
         agent.playEpisode(0)
         avgScore += game.score
+        maxScore = max(maxScore, game.score)
+        minScore = min(minScore, game.score)
+        avgTotal += game.totalScore
+        maxTotal = max(maxTotal, game.totalScore)
+        minTotal = min(minTotal, game.totalScore)
     
-    return avgScore / count
+    return minScore, avgScore / count, maxScore, minTotal, avgTotal / count, maxTotal
 
 
 def playAndLearn(agentNet, targetNet, player):
@@ -114,17 +127,22 @@ def playAndLearn(agentNet, targetNet, player):
                 timeLast = timeCur
                 sampleLast += reportInterval
 
-                evalScore = playSomeGames(game, targetNet, EVAL_GAMES)
+                evalScMin, evalScAvg, evalScMax, evalToMin, evalToAvg, evalToMax = playSomeGames(game, targetNet, EVAL_GAMES)
 
                 if sampleCount >= initial_exp_gathering:
                     writer.add_scalar('Training/Eps', epsilon, sampleCount)
                     writer.add_scalar('Training/Speed', speed, sampleCount)
                     writer.add_scalar('Training/Episode Length', stepCount/epCount, sampleCount)
-                    writer.add_scalar('Training/Eval Score', evalScore, sampleCount)
+                    writer.add_scalar('Training/Eval Score', evalScAvg, sampleCount)
+                    writer.add_scalar('Training/Eval Score Min', evalScMin, sampleCount)
+                    writer.add_scalar('Training/Eval Score Max', evalScMax, sampleCount)
+                    writer.add_scalar('Training/Eval Total Score', evalToAvg, sampleCount)
+                    writer.add_scalar('Training/Eval Total Score Min', evalToMin, sampleCount)
+                    writer.add_scalar('Training/Eval Total Score Max', evalToMax, sampleCount)
                     if epochs > 0:
                         writer.add_scalar('Training/Loss', lossAvg/epochs, sampleCount)
 
-                print(f'Played {sampleLast} steps ({episodeCount} episodes) ({speed:8.2f} samples/s): Average step count {stepCount/epCount:7.2f}, Evaluation score {evalScore:4.1f}')
+                print(f'Played {sampleLast} steps ({episodeCount} episodes) ({speed:8.2f} samples/s): Average steps {stepCount/epCount:7.2f}, Evaluation score {evalScMin:2}, {evalScAvg:4.1f}, {evalScMax:2}, total {evalToMin:5}, {evalToAvg:7.1f}, {evalToMax:5}')
                 stepCount = 0
                 epCount = 0
                 epochs = 0
@@ -137,7 +155,7 @@ def playAndLearn(agentNet, targetNet, player):
                 lastSyncSample += targetSyncInterval
                 targetNet.load_state_dict(agentNet.state_dict())
 
-            batchCount = max(1, int(episodeLength / 25))
+            batchCount = max(1, int(episodeLength / 10))
             epochs += batchCount
             for _ in range(batchCount):
                 optim.zero_grad()
@@ -145,9 +163,9 @@ def playAndLearn(agentNet, targetNet, player):
                 states, actions, rewards, terms, newStates = expBuffer.sample(batch_size)
                 states_t = agentNet.prepareInputs(states) #torch.Tensor(agentNet.prepareInput(s) for s in states).to(device)
                 newStates_t = agentNet.prepareInputs(newStates) #torch.Tensor([agentNet.prepareInput(s) for s in newStates]).to(device)
-                actions_t = torch.tensor(actions, dtype=torch.int64).to(device)
-                rewards_t = torch.tensor(rewards).to(device)
-                terms_t = torch.tensor(terms, dtype=torch.bool).to(device)
+                actions_t = torch.from_numpy(actions).to(device)
+                rewards_t = torch.from_numpy(rewards).to(device)
+                terms_t = torch.from_numpy(terms).to(device)
 
                 stateActionQs = agentNet(states_t)
                 stateActionQs = torch.gather(stateActionQs, 1, actions_t.unsqueeze(-1)).squeeze(-1)
@@ -167,7 +185,6 @@ def playAndLearn(agentNet, targetNet, player):
     except KeyboardInterrupt:
         print(f'Playing stopped after {sampleCount} steps ({episodeCount} episodes).')
         torch.save(agentNet.state_dict(), os.path.join('models', datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')+f' SC {sampleCount}'))
-
     
     writer.close()
 
@@ -213,10 +230,14 @@ if __name__ == '__main__':
     # exit()
 
     agentNet = AgentNet()
+    #agentNet.load_state_dict(torch.load('models/2021-04-06_23-13-56 SC 3281576'))
+
     targetNet = AgentNet()
+    targetNet.load_state_dict(agentNet.state_dict())
+
     player = AgentPlayer(agentNet, game)
 
-    # playAndPrintEpisode(player)
+    #playAndPrintEpisode(player, 0)
 
     playAndLearn(agentNet, targetNet, player)
     
