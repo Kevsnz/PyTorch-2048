@@ -11,7 +11,9 @@ class AgentNet(torch.nn.Module):
             nn.ReLU(),
             nn.Linear(512, 256),
             nn.ReLU(),
-            nn.Linear(256,4)
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128,4)
         ).to(self.device)
     
     # input: batch of 4x4 boards with 12 layers, output: estimated Q values for each direction of swipe
