@@ -5,6 +5,7 @@ import numpy as np
 class Game2048:
     TARGET_SCORE = 11 # 2 ** 11 = 2048
     FOUR_PROBABILITY = 0.1
+    MOVE_STRING = ['LEFT', 'UP', 'RIGHT', 'DOWN']
 
     def __init__(self):
         self.numbers = [0]
