@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
+from game import Game2048
 
 class AgentNet(torch.nn.Module):
     device = 'cpu' #torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -26,11 +28,5 @@ class AgentNet(torch.nn.Module):
         if len(boards.shape) == 2:
             boards = np.expand_dims(boards, 0)
         
-        dims = boards.shape
-        inputs = torch.zeros((dims[0],4,4,12), dtype=torch.float32)
-        for b in range(dims[0]):
-            for i in range(0, 4):
-                for j in range(0, 4):
-                    inputs[b,i,j,boards[b][i][j]] = 1.0
-        
-        return inputs.to(self.device)
+        inputs = F.one_hot(torch.as_tensor(boards, dtype=torch.int64), Game2048.TARGET_SCORE+1)
+        return inputs.type(torch.FloatTensor).to(self.device)
