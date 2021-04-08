@@ -132,7 +132,7 @@ class Game2048:
             if self.score < self.board[i][j+1]:
                 self.score = self.board[i][j+1]
             
-            score = self.board[i][j+1]
+            score = 2**self.board[i][j+1]
             #score2, _ = self.sweepRight(i, j+1)
             #return score + score2, True
             return score, True
