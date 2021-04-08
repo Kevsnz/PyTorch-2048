@@ -127,7 +127,7 @@ def playAndLearn(agentNet, targetNet, player):
                 timeLast = timeCur
                 sampleLast += reportInterval
 
-                evalScMin, evalScAvg, evalScMax, evalToMin, evalToAvg, evalToMax = playSomeGames(game, targetNet, EVAL_GAMES)
+                evalScMin, evalScAvg, evalScMax, evalToMin, evalToAvg, evalToMax = playSomeGames(game, agentNet, EVAL_GAMES)
 
                 if sampleCount >= initial_exp_gathering:
                     writer.add_scalar('Training/Eps', epsilon, sampleCount)
