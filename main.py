@@ -173,7 +173,8 @@ def playAndLearn(agentNet, targetNet, player):
             stateActionQs = agentNet(states_t)
             stateActionQs = torch.gather(stateActionQs, 1, actions_t.unsqueeze(-1)).squeeze(-1)
 
-            nextStateQs = targetNet(newStates_t).max(1)[0]
+            nextActions = agentNet(newStates_t).max(1)[1]
+            nextStateQs = targetNet(newStates_t).gather(1, nextActions.unsqueeze(-1)).squeeze(-1)
             nextStateQs[terms_t] = 0.0
             nextStateQs = nextStateQs.detach()
 
