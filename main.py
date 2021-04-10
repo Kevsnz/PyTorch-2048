@@ -1,13 +1,14 @@
-from game import Game2048
-from agent_net import AgentNet
-from agent_player import AgentPlayer
-from experience_buffer import ExperienceBuffer
-from tensorboardX import SummaryWriter
 import random
 import time
 import torch
 import datetime
 import os
+import numpy as np
+from game import Game2048
+from agent_net import AgentNet
+from agent_player import AgentPlayer
+from experience_buffer import ExperienceBuffer
+from tensorboardX import SummaryWriter
 
 exp_capacity = 10000
 initial_exp_gathering = 2000
@@ -15,10 +16,10 @@ targetSyncInterval = 3000
 
 epsilon_initial = 1
 epsilon_final = 0.02
-epsilon_decay_time = 1000000
+epsilon_decay_time = 200000
 epsilon_decay_amount = epsilon_initial - epsilon_final
 
-batch_size = 32
+batch_size = 16
 gamma = 0.99
 learningRate = 0.0005
 
@@ -90,101 +91,98 @@ def playAndLearn(agentNet, targetNet, player):
 
     reportInterval = 2000
 
-    sampleCount = 0
-    sampleLast = 0
-    episodeCount = 0
+    sampleCountTotal = 0
+    sampleLastReport = 0
+    episodeCountTotal = 0
     lastSyncSample = 0
-    timeLast = time.perf_counter()
+    timeLastReport = time.perf_counter()
     epsilon = epsilon_initial
 
     lossFunc = torch.nn.MSELoss()
     optim = torch.optim.Adam(agentNet.parameters(), lr=learningRate)
 
-    stepCount = 0
-    epCount = 0
-
-    lossAvg = 0
-    epochs = 0
+    lossAcc = 0
+    lossCnt = 0
+    episodeLengths = [0]
 
     try:
         while True:
-            if sampleCount > initial_exp_gathering:
-                part = min(1.0, (sampleCount - initial_exp_gathering) / epsilon_decay_time)
+            if sampleCountTotal > initial_exp_gathering:
+                part = min(1.0, (sampleCountTotal - initial_exp_gathering) / epsilon_decay_time)
                 epsilon = epsilon_initial - epsilon_decay_amount * part
             
-            s, a, r, e, s1 = player.playEpisode(epsilon)
-            expBuffer.add(s, a, r, e, s1)
-            episodeLength = len(s)
-            sampleCount += episodeLength
-            episodeCount += 1
+            s, a, r, term, s1 = player.makeTurn(epsilon)
+            expBuffer.add(s, a, r, term, s1)
+            sampleCountTotal += 1
+            episodeLengths[-1] += 1
 
-            stepCount += episodeLength
-            epCount += 1
+            if term:
+                episodeCountTotal += 1
+                episodeLengths.append(0)
+                episodeLengths = episodeLengths[-50:]
 
-            if sampleCount - sampleLast > reportInterval:
-                timeCur = time.perf_counter()
-                speed = (sampleCount - sampleLast) / (timeCur - timeLast)
-                timeLast = timeCur
-                sampleLast += reportInterval
+                if sampleCountTotal - sampleLastReport > reportInterval:
+                    timeCur = time.perf_counter()
+                    speed = (sampleCountTotal - sampleLastReport) / (timeCur - timeLastReport)
+                    timeLastReport = timeCur
+                    sampleLastReport += reportInterval
+                    epLengthAvg = np.mean(episodeLengths)
 
-                evalScMin, evalScAvg, evalScMax, evalToMin, evalToAvg, evalToMax = playSomeGames(game, agentNet, EVAL_GAMES)
+                    evalScMin, evalScAvg, evalScMax, evalToMin, evalToAvg, evalToMax = playSomeGames(game, agentNet, EVAL_GAMES)
 
-                if sampleCount >= initial_exp_gathering:
-                    writer.add_scalar('Training/Eps', epsilon, sampleCount)
-                    writer.add_scalar('Training/Speed', speed, sampleCount)
-                    writer.add_scalar('Training/Episode Length', stepCount/epCount, sampleCount)
-                    writer.add_scalar('Training/Eval Score', evalScAvg, sampleCount)
-                    writer.add_scalar('Training/Eval Score Min', evalScMin, sampleCount)
-                    writer.add_scalar('Training/Eval Score Max', evalScMax, sampleCount)
-                    writer.add_scalar('Training/Eval Total Score', evalToAvg, sampleCount)
-                    writer.add_scalar('Training/Eval Total Score Min', evalToMin, sampleCount)
-                    writer.add_scalar('Training/Eval Total Score Max', evalToMax, sampleCount)
-                    if epochs > 0:
-                        writer.add_scalar('Training/Loss', lossAvg/epochs, sampleCount)
+                    if sampleCountTotal >= initial_exp_gathering:
+                        writer.add_scalar('Training/Eps', epsilon, sampleCountTotal)
+                        writer.add_scalar('Training/Speed', speed, sampleCountTotal)
+                        writer.add_scalar('Training/Episode Length', epLengthAvg, sampleCountTotal)
+                        writer.add_scalar('Training/Eval Score', evalScAvg, sampleCountTotal)
+                        writer.add_scalar('Training/Eval Score Min', evalScMin, sampleCountTotal)
+                        writer.add_scalar('Training/Eval Score Max', evalScMax, sampleCountTotal)
+                        writer.add_scalar('Training/Eval Total Score', evalToAvg, sampleCountTotal)
+                        writer.add_scalar('Training/Eval Total Score Min', evalToMin, sampleCountTotal)
+                        writer.add_scalar('Training/Eval Total Score Max', evalToMax, sampleCountTotal)
+                        if lossCnt > 0:
+                            writer.add_scalar('Training/Loss', lossAcc/lossCnt, sampleCountTotal)
 
-                print(f'Played {sampleLast} steps ({episodeCount} episodes) ({speed:8.2f} samples/s): Average steps {stepCount/epCount:7.2f}, Evaluation score {evalScMin:2}, {evalScAvg:4.1f}, {evalScMax:2}, total {evalToMin:5}, {evalToAvg:7.1f}, {evalToMax:5}')
-                stepCount = 0
-                epCount = 0
-                epochs = 0
-                lossAvg = 0
+                    print(f'Played {sampleLastReport} steps ({episodeCountTotal} episodes) ({speed:8.2f} samples/s): Average steps {epLengthAvg:7.2f}, Evaluation score {evalScMin:2}, {evalScAvg:4.1f}, {evalScMax:2}, total {evalToMin:5}, {evalToAvg:7.1f}, {evalToMax:5}')
+                    lossAcc = lossCnt = 0
+                
+                game.reset()
 
-            if sampleCount < initial_exp_gathering:
+            if sampleCountTotal < initial_exp_gathering:
                 continue
 
-            if sampleCount - lastSyncSample > targetSyncInterval:
+            if sampleCountTotal - lastSyncSample > targetSyncInterval:
                 lastSyncSample += targetSyncInterval
                 targetNet.load_state_dict(agentNet.state_dict())
 
-            batchCount = max(1, int(episodeLength / 10))
-            epochs += batchCount
-            for _ in range(batchCount):
-                optim.zero_grad()
+            optim.zero_grad()
 
-                states, actions, rewards, terms, newStates = expBuffer.sample(batch_size)
-                states_t = agentNet.prepareInputs(states) #torch.Tensor(agentNet.prepareInput(s) for s in states).to(device)
-                newStates_t = agentNet.prepareInputs(newStates) #torch.Tensor([agentNet.prepareInput(s) for s in newStates]).to(device)
-                actions_t = torch.from_numpy(actions).to(device)
-                rewards_t = torch.from_numpy(rewards).to(device)
-                terms_t = torch.from_numpy(terms).to(device)
+            states, actions, rewards, terms, newStates = expBuffer.sample(batch_size)
+            states_t = agentNet.prepareInputs(states) #torch.Tensor(agentNet.prepareInput(s) for s in states).to(device)
+            newStates_t = agentNet.prepareInputs(newStates) #torch.Tensor([agentNet.prepareInput(s) for s in newStates]).to(device)
+            actions_t = torch.from_numpy(actions).to(device)
+            rewards_t = torch.from_numpy(rewards).to(device)
+            terms_t = torch.from_numpy(terms).to(device)
 
-                stateActionQs = agentNet(states_t)
-                stateActionQs = torch.gather(stateActionQs, 1, actions_t.unsqueeze(-1)).squeeze(-1)
+            stateActionQs = agentNet(states_t)
+            stateActionQs = torch.gather(stateActionQs, 1, actions_t.unsqueeze(-1)).squeeze(-1)
 
-                nextStateQs = targetNet(newStates_t).max(1)[0]
-                nextStateQs[terms_t] = 0.0
-                nextStateQs = nextStateQs.detach()
+            nextStateQs = targetNet(newStates_t).max(1)[0]
+            nextStateQs[terms_t] = 0.0
+            nextStateQs = nextStateQs.detach()
 
-                rewards_t = nextStateQs * gamma + rewards_t
-                loss = lossFunc(stateActionQs, rewards_t)
+            rewards_t = nextStateQs * gamma + rewards_t
+            loss = lossFunc(stateActionQs, rewards_t)
 
-                loss.backward()
-                optim.step()
+            loss.backward()
+            optim.step()
 
-                lossAvg += loss.item()
+            lossAcc += loss.item()
+            lossCnt += 1
 
     except KeyboardInterrupt:
-        print(f'Playing stopped after {sampleCount} steps ({episodeCount} episodes).')
-        torch.save(agentNet.state_dict(), os.path.join('models', datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')+f' SC {sampleCount}'))
+        print(f'Playing stopped after {sampleCountTotal} steps ({episodeCountTotal} episodes).')
+        torch.save(agentNet.state_dict(), os.path.join('models', datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')+f' SC {sampleCountTotal}'))
     
     writer.close()
 

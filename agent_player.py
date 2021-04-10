@@ -18,7 +18,7 @@ class AgentPlayer:
         endeds = []
         newStates = []
         while True:
-            s, a, r, e, s1 = self.makeTurn(self.net, self.game, eps)
+            s, a, r, e, s1 = self._makeTurn(self.net, self.game, eps)
 
             states.append(s)
             actions.append(a)
@@ -32,7 +32,11 @@ class AgentPlayer:
         return states, actions, rewards, endeds, newStates
     
 
-    def makeTurn(self, net: AgentNet, game: Game2048, eps: float):
+    def makeTurn(self, eps: float):
+        return self._makeTurn(self.net, self.game, eps)
+    
+
+    def _makeTurn(self, net: AgentNet, game: Game2048, eps: float):
         state = game.board.copy()
 
         if random.random() < eps:

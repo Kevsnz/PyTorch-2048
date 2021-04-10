@@ -15,12 +15,20 @@ class ExperienceBuffer:
         self.newStateBuffer = collections.deque(maxlen=self.capacity)
 
 
-    def add(self, states, actions, rewards, terms, newStates):
+    def addRange(self, states, actions, rewards, terms, newStates):
         self.stateBuffer.extend(states)
         self.actionBuffer.extend(actions)
         self.rewardBuffer.extend(rewards)
         self.termBuffer.extend(terms)
         self.newStateBuffer.extend(newStates)
+
+
+    def add(self, state, action, reward, terminal, newState):
+        self.stateBuffer.append(state)
+        self.actionBuffer.append(action)
+        self.rewardBuffer.append(reward)
+        self.termBuffer.append(terminal)
+        self.newStateBuffer.append(newState)
 
 
     def sample(self, count):
