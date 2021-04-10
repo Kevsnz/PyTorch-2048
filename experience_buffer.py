@@ -31,6 +31,10 @@ class ExperienceBuffer:
         self.newStateBuffer.append(newState)
 
 
+    def count(self):
+        return len(self.stateBuffer)
+
+
     def sample(self, count):
         idxs = np.random.choice(len(self.stateBuffer), size=count, replace=False)
 
