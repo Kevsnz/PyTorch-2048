@@ -11,19 +11,19 @@ from agent_player import AgentPlayer
 from experience_buffer import ExperienceBuffer
 from tensorboardX import SummaryWriter
 
-exp_capacity = 10000
+exp_capacity = 30000
 initial_exp_gathering = 2000
-target_sync_interval = 3000
-evaluation_interval = 5000
+target_sync_interval = 2000
+evaluation_interval = 3000
 
-epsilon_initial = 0.4
+epsilon_initial = 1
 epsilon_final = 0.02
-epsilon_decay_time = 200000
+epsilon_decay_time = 500000
 epsilon_decay_amount = epsilon_initial - epsilon_final
 
-batch_size = 16
+batch_size = 32
 gamma = 0.99
-learning_rate = 0.0002
+learning_rate = 0.0001
 
 EVAL_GAMES = 10
 
