@@ -19,13 +19,13 @@ evaluation_interval = 3000
 
 epsilon_initial = 1
 epsilon_final = 0.02
-epsilon_decay_time = 500000
+epsilon_decay_time = 300000
 epsilon_decay_amount = epsilon_initial - epsilon_final
 
-batch_size = 32
+batch_size = 16
 GAMMA = 0.99
-learning_rate = 0.0001
-EXP_UNROLL_STEPS = 2
+learning_rate = 0.0005
+EXP_UNROLL_STEPS = 1
 
 EVAL_GAMES = 10
 
@@ -90,6 +90,7 @@ def playSomeGames(game, net, count):
 def playAndLearn(agentNet, targetNet, player):
     expBuffer = ExperienceBuffer(exp_capacity)
     expUnroller = ExperienceUnroller(EXP_UNROLL_STEPS, GAMMA)
+    qGamma = GAMMA ** (EXP_UNROLL_STEPS + 1)
     device = AgentNet.device
 
     writer = SummaryWriter(logdir=os.path.join('tensorboard', datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')))
@@ -118,7 +119,6 @@ def playAndLearn(agentNet, targetNet, player):
                 epsilon = epsilon_initial - epsilon_decay_amount * part
             
             s, a, r, term, s1 = player.makeTurn(epsilon)
-            expBuffer.add(s, a, r, term, s1)
             sampleCountTotal += 1
             epLen += 1
 
@@ -127,6 +127,10 @@ def playAndLearn(agentNet, targetNet, player):
                 episodeLengths.append(epLen)
                 epLen = 0
                 game.reset()
+            
+            s, a, r, term, s1 = expUnroller.add(s, a, r, term, s1)
+            if s is not None:
+                expBuffer.add(s, a, r, term, s1)
             
             if expBuffer.count() < initial_exp_gathering:
                 timeLastReport = time.perf_counter()
@@ -181,8 +185,8 @@ def playAndLearn(agentNet, targetNet, player):
             nextStateQs[terms_t] = 0.0
             nextStateQs = nextStateQs.detach()
 
-            rewards_t = nextStateQs * GAMMA + rewards_t
-            loss = lossFunc(stateActionQs, rewards_t)
+            totalRewards_t = nextStateQs * qGamma + rewards_t
+            loss = lossFunc(stateActionQs, totalRewards_t)
 
             loss.backward()
             optim.step()

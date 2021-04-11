@@ -130,9 +130,9 @@ class Game2048:
             self.mergeBoard[i][j+1] = True
 
             if self.score < self.board[i][j+1]:
-                self.score = self.board[i][j+1]
+                self.score = self.board[i][j+1].item()
             
-            score = 2**self.board[i][j+1]
+            score = 2**self.board[i][j+1].item()
             #score2, _ = self.sweepRight(i, j+1)
             #return score + score2, True
             return score, True
