@@ -9,6 +9,7 @@ from game import Game2048
 from agent_net import AgentNet
 from agent_player import AgentPlayer
 from experience_buffer import ExperienceBuffer
+from experience_unroller import ExperienceUnroller
 from tensorboardX import SummaryWriter
 
 exp_capacity = 30000
@@ -22,8 +23,9 @@ epsilon_decay_time = 500000
 epsilon_decay_amount = epsilon_initial - epsilon_final
 
 batch_size = 32
-gamma = 0.99
+GAMMA = 0.99
 learning_rate = 0.0001
+EXP_UNROLL_STEPS = 2
 
 EVAL_GAMES = 10
 
@@ -87,6 +89,7 @@ def playSomeGames(game, net, count):
 
 def playAndLearn(agentNet, targetNet, player):
     expBuffer = ExperienceBuffer(exp_capacity)
+    expUnroller = ExperienceUnroller(EXP_UNROLL_STEPS, GAMMA)
     device = AgentNet.device
 
     writer = SummaryWriter(logdir=os.path.join('tensorboard', datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')))
@@ -178,7 +181,7 @@ def playAndLearn(agentNet, targetNet, player):
             nextStateQs[terms_t] = 0.0
             nextStateQs = nextStateQs.detach()
 
-            rewards_t = nextStateQs * gamma + rewards_t
+            rewards_t = nextStateQs * GAMMA + rewards_t
             loss = lossFunc(stateActionQs, rewards_t)
 
             loss.backward()
