@@ -20,7 +20,7 @@ evaluation_interval = 2000
 
 epsilon_initial = 1
 epsilon_final = 0.01
-epsilon_decay_time = 300000
+epsilon_decay_time = 100000
 epsilon_decay_amount = epsilon_initial - epsilon_final
 
 batch_size = 16
@@ -28,6 +28,10 @@ GAMMA = 0.99
 learning_rate = 0.0002
 GRAD_CLIP = 5
 EXP_UNROLL_STEPS = 0
+
+PRIO_ALPHA = 0.6
+PRIO_BETA_INITIAL = 0.4
+PRIO_BETA_RISE_TIME = 100000
 
 EVAL_GAMES = 10
 
@@ -90,7 +94,7 @@ def playSomeGames(game, net, count):
 
 
 def playAndLearn(agentNet, targetNet, player):
-    expBuffer = ExperienceBuffer(exp_capacity)
+    expBuffer = ExperienceBuffer(exp_capacity, PRIO_ALPHA)
     expUnroller = ExperienceUnroller(EXP_UNROLL_STEPS, GAMMA)
     qGamma = GAMMA ** (EXP_UNROLL_STEPS + 1)
     device = AgentNet.device
@@ -104,12 +108,14 @@ def playAndLearn(agentNet, targetNet, player):
     episodeCountTotal = 0
     timeLastReport = time.perf_counter()
     epsilon = epsilon_initial
+    beta = PRIO_BETA_INITIAL
 
     lossFunc = torch.nn.MSELoss()
     optim = torch.optim.Adam(agentNet.parameters(), lr=learning_rate)
 
     lossAcc = 0
     lossCnt = 0
+    # normAcc = 0
     epLen = 0
     episodeLengths = collections.deque(maxlen=20)
     evalScMin = evalScAvg = evalScMax = evalToMin = evalToAvg = evalToMax = 0
@@ -119,6 +125,7 @@ def playAndLearn(agentNet, targetNet, player):
             if sampleCountTotal > initial_exp_gathering:
                 part = min(1.0, (sampleCountTotal - initial_exp_gathering) / epsilon_decay_time)
                 epsilon = epsilon_initial - epsilon_decay_amount * part
+                beta = min(1.0, PRIO_BETA_INITIAL + (1 - PRIO_BETA_INITIAL) * (sampleCountTotal - initial_exp_gathering) / PRIO_BETA_RISE_TIME)
             
             s, a, r, term, s1 = player.makeTurn(epsilon)
             sampleCountTotal += 1
@@ -150,6 +157,7 @@ def playAndLearn(agentNet, targetNet, player):
                 writer.add_scalar('Training/Episode Length', epLengthAvg, sampleCountTotal)
                 if lossCnt > 0:
                     writer.add_scalar('Training/Loss', lossAcc/lossCnt, sampleCountTotal)
+                    # writer.add_scalar('Training/Gradient Norm', normAcc/lossCnt, sampleCountTotal)
 
                 print(f'Played {sampleLastReport} steps ({episodeCountTotal} episodes) ({speed:8.2f} samples/s): Average steps {epLengthAvg:7.2f}, Evaluation score {evalScMin:2}, {evalScAvg:4.1f}, {evalScMax:2}, total {evalToMin:5}, {evalToAvg:7.1f}, {evalToMax:5}')
                 lossAcc = lossCnt = 0
@@ -172,12 +180,14 @@ def playAndLearn(agentNet, targetNet, player):
 
             optim.zero_grad()
 
-            states, actions, rewards, terms, newStates = expBuffer.sample(batch_size)
+            states, actions, rewards, terms, newStates, idxs, weights = expBuffer.sample(batch_size, beta)
+
             states_t = agentNet.prepareInputs(states)
             newStates_t = agentNet.prepareInputs(newStates)
             actions_t = torch.from_numpy(actions).to(device)
             rewards_t = torch.from_numpy(rewards).to(device)
             terms_t = torch.from_numpy(terms).to(device)
+            weights_t = torch.from_numpy(weights).to(device)
 
             stateActionQs = agentNet(states_t)
             stateActionQs = torch.gather(stateActionQs, 1, actions_t.unsqueeze(-1)).squeeze(-1)
@@ -188,14 +198,25 @@ def playAndLearn(agentNet, targetNet, player):
             nextStateQs = nextStateQs.detach()
 
             totalRewards_t = nextStateQs * qGamma + rewards_t
-            loss = lossFunc(stateActionQs, totalRewards_t)
+            losses_t = weights_t * (stateActionQs - totalRewards_t) ** 2
+            loss = losses_t.mean()
 
             loss.backward()
+
+            # totalNorm = 0
+            # for p in agentNet.parameters():
+            #     paramNorm = p.grad.data.norm(2)
+            #     totalNorm += paramNorm.item() ** 2
+            
+            # totalNorm = totalNorm ** (1. / 2)
+
             torch.nn.utils.clip_grad_norm_(agentNet.parameters(), GRAD_CLIP)
             optim.step()
+            expBuffer.updatePriorities(idxs, (losses_t + 1e-5).data.cpu().numpy())
 
             lossAcc += loss.item()
             lossCnt += 1
+            # normAcc += totalNorm
 
     except KeyboardInterrupt:
         print(f'Playing stopped after {sampleCountTotal} steps ({episodeCountTotal} episodes).')

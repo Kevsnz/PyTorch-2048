@@ -2,8 +2,9 @@ import numpy as np
 import collections
 
 class ExperienceBuffer:
-    def __init__(self, capacity):
+    def __init__(self, capacity, alpha = 0.6):
         self.capacity = capacity
+        self.alpha = alpha
         self.clear()
 
 
@@ -13,9 +14,16 @@ class ExperienceBuffer:
         self.rewardBuffer = collections.deque(maxlen=self.capacity)
         self.termBuffer = collections.deque(maxlen=self.capacity)
         self.newStateBuffer = collections.deque(maxlen=self.capacity)
+        self.priorities = np.zeros(self.capacity)
+        self.pos = 0
 
 
     def addRange(self, states, actions, rewards, terms, newStates):
+        max = 1.0 if len(self.stateBuffer) == 0 else self.priorities.max()
+        for _ in range(len(states)):
+            self.priorities[self.pos] = max
+            self.pos = (self.pos + 1) % self.capacity
+        
         self.stateBuffer.extend(states)
         self.actionBuffer.extend(actions)
         self.rewardBuffer.extend(rewards)
@@ -24,6 +32,8 @@ class ExperienceBuffer:
 
 
     def add(self, state, action, reward, terminal, newState):
+        self.priorities[self.pos] = 1.0 if len(self.stateBuffer) == 0 else self.priorities.max()
+        self.pos = (self.pos + 1) % self.capacity
         self.stateBuffer.append(state)
         self.actionBuffer.append(action)
         self.rewardBuffer.append(reward)
@@ -35,13 +45,27 @@ class ExperienceBuffer:
         return len(self.stateBuffer)
 
 
-    def sample(self, count):
-        idxs = np.random.choice(len(self.stateBuffer), size=count, replace=False)
+    def sample(self, count, beta = 0.4):
+        ps = self.priorities if len(self.stateBuffer) == self.capacity else self.priorities[:self.pos]
+        ps = ps ** self.alpha
+        ps /= ps.sum()
+
+        idxs = np.random.choice(len(self.stateBuffer), size=count, p=ps)
+        if len(self.stateBuffer) == self.capacity:
+            idxs -= self.pos
 
         states, actions, rewards, terms, newStates = zip(*[(self.stateBuffer[i], self.actionBuffer[i], self.rewardBuffer[i], self.termBuffer[i], self.newStateBuffer[i]) for i in idxs])
+        ws = (len(self.stateBuffer) * ps[idxs]) ** (-beta)
+        ws /= ws.max()
         
-        return np.array(states), \
-            np.array(actions, dtype=np.int64), \
-            np.array(rewards, dtype=np.float32), \
-            np.array(terms, dtype=np.bool8), \
-            np.array(newStates)
+        return np.array(states, copy=False), \
+            np.array(actions, dtype=np.int64, copy=False), \
+            np.array(rewards, dtype=np.float32, copy=False), \
+            np.array(terms, dtype=np.bool8, copy=False), \
+            np.array(newStates, copy=False), \
+            idxs, ws
+
+
+    def updatePriorities(self, idxs, prios):
+        for i, p in zip(idxs, prios):
+            self.priorities[i] = p
