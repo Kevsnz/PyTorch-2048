@@ -24,12 +24,6 @@ class ExperienceUnroller:
 
             self.rewards[-i] += r * self.gamma**i
         
-        # if len(self.states) == self.stepCount:
-        #     sr = self.states[0]
-        #     ar = self.actions[0]
-        #     rr = self.rewards[0]
-        #     tr = self.terminals[0]
-
         try:
             if len(self.states) == self.stepCount:
                 # return sr, ar, rr, tr, s1

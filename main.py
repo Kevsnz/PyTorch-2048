@@ -1,6 +1,7 @@
 import random
 import time
 import torch
+import torch.nn.utils
 import datetime
 import os
 import numpy as np
@@ -13,19 +14,20 @@ from experience_unroller import ExperienceUnroller
 from tensorboardX import SummaryWriter
 
 exp_capacity = 30000
-initial_exp_gathering = 2000
-target_sync_interval = 2000
-evaluation_interval = 3000
+initial_exp_gathering = 5000
+target_sync_interval = 8000
+evaluation_interval = 2000
 
 epsilon_initial = 1
-epsilon_final = 0.02
+epsilon_final = 0.01
 epsilon_decay_time = 300000
 epsilon_decay_amount = epsilon_initial - epsilon_final
 
 batch_size = 16
 GAMMA = 0.99
-learning_rate = 0.0005
-EXP_UNROLL_STEPS = 1
+learning_rate = 0.0002
+GRAD_CLIP = 5
+EXP_UNROLL_STEPS = 0
 
 EVAL_GAMES = 10
 
@@ -189,6 +191,7 @@ def playAndLearn(agentNet, targetNet, player):
             loss = lossFunc(stateActionQs, totalRewards_t)
 
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(agentNet.parameters(), GRAD_CLIP)
             optim.step()
 
             lossAcc += loss.item()
