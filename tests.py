@@ -165,31 +165,99 @@ def TestGame():
 
 def TestUnroller():
     print('Running Experience Unroller tests...')
+
+    testCases = [
+        { # 0
+            'sc': 0,
+            'gamma': 0.5,
+            'inp': [
+                [1, 2, 3, False, 4]
+            ],
+            'outp': [1, 2, 3, False, 4]
+        },
+        { # 1
+            'sc': 1,
+            'gamma': 0.5,
+            'inp': [
+                [1, 2, 3, False, 4]
+            ],
+            'outp': [None, None, None, None, 4]
+        },
+        { # 2
+            'sc': 1,
+            'gamma': 0.5,
+            'inp': [
+                [1, 2, 3, False, 4],
+                [5, 6, 7, False, 8]
+            ],
+            'outp': [1, 2, 6.5, False, 8]
+        },
+        { # 3
+            'sc': 1,
+            'gamma': 0.5,
+            'inp': [
+                [1, 2, 3, True, 4],
+                [5, 6, 7, False, 8]
+            ],
+            'outp': [1, 2, 3, True, 8]
+        },
+        { # 4
+            'sc': 1,
+            'gamma': 0.5,
+            'inp': [
+                [1, 2, 3, False, 4],
+                [5, 6, 7, True, 8]
+            ],
+            'outp': [1, 2, 6.5, True, 8]
+        },
+        { # 5
+            'sc': 2,
+            'gamma': 0.5,
+            'inp': [
+                [1, 2, 3, False, 4],
+                [5, 6, 7, False, 8],
+                [9,10,11, False,12]
+            ],
+            'outp': [1, 2, 9.25, False, 12]
+        },
+        { # 6
+            'sc': 2,
+            'gamma': 0.5,
+            'inp': [
+                [1, 2, 3, False, 4],
+                [5, 6, 7, False, 8],
+                [9,10,11, False,12],
+                [13,14,15, False,16]
+            ],
+            'outp': [5, 6, 16.25, False, 16]
+        },
+        { # 7
+            'sc': 2,
+            'gamma': 0.5,
+            'inp': [
+                [1, 2, 3, False, 4],
+                [5, 6, 7, False, 8],
+                [9,10,11,  True,12],
+                [13,14,15, False,16]
+            ],
+            'outp': [5, 6, 12.5, True, 16]
+        }
+    ]
+
     passes = fails = 0
 
-    exp = ExperienceUnroller(0)
-    s,a,r,t,s1 = exp.add(1, 2, 3, False, 4)
-    if s!=1 or a!=2 or r!=3 or not(not t) or s1!=4:
-        print(f'FAIL: No unroll, got ({s}, {a}, {r}, {t}, {s1}), expected (1, 2, 3, False, 4)')
-        fails += 1
-    
-    exp = ExperienceUnroller(1, 0.5)
-    s,a,r,t,s1 = exp.add(1, 2, 3, False, 4)
-    if not(s is None and a is None and r is None and t is None and s1 is None):
-        print(f'FAIL: 1 step unroll (1), got ({s}, {a}, {r}, {t}, {s1}), expected all None')
-        fails += 1
+    for i in range(len(testCases)):
+        tc = testCases[i]
+        exp = ExperienceUnroller(tc['sc'], tc['gamma'])
+        for inp in tc['inp']:
+            s,a,r,t,s1 = exp.add(inp[0], inp[1], inp[2], inp[3], inp[4])
+        if not(s == tc['outp'][0] and a == tc['outp'][1] and r == tc['outp'][2] and t == tc['outp'][3] and s1 == tc['outp'][4]):
+            print(f'#{i} FAIL: Step count {tc["sc"]}: expected ({tc["outp"][0]}, {tc["outp"][1]}, {tc["outp"][2]}, {tc["outp"][3]}, {tc["outp"][4]}), got ({s}, {a}, {r}, {t}, {s1})')
+            fails += 1
+        else:
+            passes += 1
 
-    s,a,r,t,s1 = exp.add(5, 6, 7, True, 8)
-    if not(s==1 and a==2 and r==6.5 and not t and 8):
-        print(f'FAIL: 1 step unroll (2), got ({s}, {a}, {r}, {t}, {s1}), expected (1, 2, 6.5, False, 8)')
-        fails += 1
-
-    s,a,r,t,s1 = exp.add(9, 10, 11, False, 12)
-    if not(s==5 and a==6 and r==7 and t and 12):
-        print(f'FAIL: 1 step unroll (3), got ({s}, {a}, {r}, {t}, {s1}), expected (5, 6, 7, True, 12)')
-        fails += 1
-    
-    return 4-fails, fails
+    return passes, fails
 
 
 if __name__ == '__main__':
