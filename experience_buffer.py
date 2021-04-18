@@ -16,13 +16,22 @@ class ExperienceBuffer:
         self.newStateBuffer = collections.deque(maxlen=self.capacity)
         self.priorities = np.zeros(self.capacity)
         self.pos = 0
+        self.maxPrio = 1.0
+        self.sumPrio = 0.0
 
 
     def addRange(self, states, actions, rewards, terms, newStates):
-        max = 1.0 if len(self.stateBuffer) == 0 else self.priorities.max()
+        if len(self.stateBuffer) == self.capacity:
+            count = len(states)
+            if self.pos < self.capacity - count:
+                self.maxPrio = max(self.priorities[:self.pos].max(), self.priorities[self.pos + count:].max())
+            else:
+                self.maxPrio = self.priorities[count - (self.capacity - self.pos):self.pos].max()
+        
         for _ in range(len(states)):
-            self.priorities[self.pos] = max
+            self.priorities[self.pos] = self.maxPrio
             self.pos = (self.pos + 1) % self.capacity
+        self.sumPrio = (self.priorities  ** self.alpha).sum()
         
         self.stateBuffer.extend(states)
         self.actionBuffer.extend(actions)
@@ -32,7 +41,15 @@ class ExperienceBuffer:
 
 
     def add(self, state, action, reward, terminal, newState):
-        self.priorities[self.pos] = 1.0 if len(self.stateBuffer) == 0 else self.priorities.max()
+        oldFirstPrio = self.priorities[self.pos]
+
+        if len(self.stateBuffer) == self.capacity and self.maxPrio == oldFirstPrio:
+                self.priorities[self.pos] = self.priorities[self.pos-1]
+                self.maxPrio = self.priorities.max()
+
+        self.sumPrio += self.maxPrio ** self.alpha - oldFirstPrio ** self.alpha
+        
+        self.priorities[self.pos] = self.maxPrio
         self.pos = (self.pos + 1) % self.capacity
         self.stateBuffer.append(state)
         self.actionBuffer.append(action)
@@ -46,9 +63,8 @@ class ExperienceBuffer:
 
 
     def sample(self, count, beta = 0.4):
-        ps = self.priorities if len(self.stateBuffer) == self.capacity else self.priorities[:self.pos]
-        ps = ps ** self.alpha
-        ps /= ps.sum()
+        ps = (self.priorities ** self.alpha) if len(self.stateBuffer) == self.capacity else self.priorities[:self.pos] ** self.alpha
+        ps /= self.sumPrio
 
         idxs = np.random.choice(len(self.stateBuffer), size=count, p=ps)
         if len(self.stateBuffer) == self.capacity:
@@ -67,5 +83,19 @@ class ExperienceBuffer:
 
 
     def updatePriorities(self, idxs, prios):
-        for i, p in zip(idxs, prios):
-            self.priorities[i] = p
+        unique = np.unique(idxs)
+        self.sumPrio -= (self.priorities[unique] ** self.alpha).sum()
+
+        oldMax = self.priorities[unique].max()
+        newMax = prios.max()
+        if self.maxPrio < newMax:
+            self.maxPrio = newMax
+            oldMax = False
+        
+        self.priorities[idxs] = prios
+
+        if self.maxPrio == oldMax:
+            self.maxPrio = self.priorities.max()
+
+        self.sumPrio += (self.priorities[unique] ** self.alpha).sum()
+        pass
