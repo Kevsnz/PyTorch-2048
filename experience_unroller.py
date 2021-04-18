@@ -23,17 +23,19 @@ class ExperienceUnroller:
                 break
 
             self.rewards[-i] += r * self.gamma**i
+            self.terminals[-i] = t # or self.terminals[-i]
         
-        try:
-            if len(self.states) == self.stepCount:
-                # return sr, ar, rr, tr, s1
-                return self.states[0], self.actions[0], self.rewards[0], self.terminals[0], s1
-            
-            return None, None, None, None, None
-        finally:
-            self.states.append(s)
-            self.actions.append(a)
-            self.rewards.append(r)
-            self.terminals.append(t)
+        sr = ar = rr = tr = None
+        if len(self.states) == self.stepCount:
+            sr = self.states[0]
+            ar = self.actions[0]
+            rr = self.rewards[0]
+            tr = self.terminals[0]
+        
+        self.states.append(s)
+        self.actions.append(a)
+        self.rewards.append(r)
+        self.terminals.append(t)
+        return sr, ar, rr, tr, s1
 
         
