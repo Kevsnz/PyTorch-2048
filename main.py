@@ -13,19 +13,19 @@ from experience_buffer import ExperienceBuffer
 from experience_unroller import ExperienceUnroller
 from tensorboardX import SummaryWriter
 
-exp_capacity = 30000
+exp_capacity = 10000
 initial_exp_gathering = 5000
-target_sync_interval = 8000
+target_sync_interval = 3000
 evaluation_interval = 2000
 
-epsilon_initial = 1
+epsilon_initial = 0.01
 epsilon_final = 0.01
-epsilon_decay_time = 100000
+epsilon_decay_time = 200000
 epsilon_decay_amount = epsilon_initial - epsilon_final
 
 batch_size = 16
 GAMMA = 0.99
-learning_rate = 0.0002
+learning_rate = 0.0001
 GRAD_CLIP = 5
 EXP_UNROLL_STEPS = 0
 
@@ -115,7 +115,6 @@ def playAndLearn(agentNet, targetNet, player):
 
     lossAcc = 0
     lossCnt = 0
-    # normAcc = 0
     epLen = 0
     episodeLengths = collections.deque(maxlen=20)
     evalScMin = evalScAvg = evalScMax = evalToMin = evalToAvg = evalToMax = 0
@@ -157,7 +156,6 @@ def playAndLearn(agentNet, targetNet, player):
                 writer.add_scalar('Training/Episode Length', epLengthAvg, sampleCountTotal)
                 if lossCnt > 0:
                     writer.add_scalar('Training/Loss', lossAcc/lossCnt, sampleCountTotal)
-                    # writer.add_scalar('Training/Gradient Norm', normAcc/lossCnt, sampleCountTotal)
 
                 print(f'Played {sampleLastReport} steps ({episodeCountTotal} episodes) ({speed:8.2f} samples/s): Average steps {epLengthAvg:7.2f}, Evaluation score {evalScMin:2}, {evalScAvg:4.1f}, {evalScMax:2}, total {evalToMin:5}, {evalToAvg:7.1f}, {evalToMax:5}')
                 lossAcc = lossCnt = 0
@@ -203,20 +201,12 @@ def playAndLearn(agentNet, targetNet, player):
 
             loss.backward()
 
-            # totalNorm = 0
-            # for p in agentNet.parameters():
-            #     paramNorm = p.grad.data.norm(2)
-            #     totalNorm += paramNorm.item() ** 2
-            
-            # totalNorm = totalNorm ** (1. / 2)
-
             torch.nn.utils.clip_grad_norm_(agentNet.parameters(), GRAD_CLIP)
             optim.step()
-            expBuffer.updatePriorities(idxs, (losses_t + 1e-5).data.cpu().numpy())
+            expBuffer.updatePriorities(idxs, losses_t.data.cpu().numpy() + 1e-5)
 
             lossAcc += loss.item()
             lossCnt += 1
-            # normAcc += totalNorm
 
     except KeyboardInterrupt:
         print(f'Playing stopped after {sampleCountTotal} steps ({episodeCountTotal} episodes).')
@@ -255,6 +245,11 @@ def playThroughStdin(game: Game2048):
         print('Game aborted.')
 
 
+def loadModel(net: AgentNet, filename: str):
+    net.load_state_dict(torch.load(('models/' + filename)))
+    print(f'Loaded parameters from file {filename}')
+
+
 if __name__ == '__main__':
     print('Welcome!')
 
@@ -266,7 +261,7 @@ if __name__ == '__main__':
     # exit()
 
     agentNet = AgentNet()
-    #agentNet.load_state_dict(torch.load('models/2021-04-06_23-13-56 SC 3281576'))
+    loadModel(agentNet, '2021-04-18_17-43-54 SC 2674000')
 
     targetNet = AgentNet()
     targetNet.load_state_dict(agentNet.state_dict())

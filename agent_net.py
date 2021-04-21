@@ -11,20 +11,20 @@ class AgentNet(torch.nn.Module):
         self.netPre = nn.Sequential(
             nn.Linear(4*4*12, 512),
             nn.ReLU(),
-            nn.Linear(512, 256),
-            nn.ReLU()
+            # nn.Linear(512, 512),
+            # nn.ReLU()
         ).to(self.device)
 
         self.netVal = nn.Sequential(
-            nn.Linear(256, 64),
+            nn.Linear(512, 256),
             nn.ReLU(),
-            nn.Linear(64,1)
+            nn.Linear(256,1)
         ).to(self.device)
         
         self.netAdv = nn.Sequential(
-            nn.Linear(256, 64),
+            nn.Linear(512, 256),
             nn.ReLU(),
-            nn.Linear(64,4)
+            nn.Linear(256,4)
         ).to(self.device)
     
     # input: batch of 4x4 boards with 12 layers, output: estimated Q values for each direction of swipe
