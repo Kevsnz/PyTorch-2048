@@ -9,31 +9,19 @@ import collections
 from game import Game2048
 from agent_net import AgentNet
 from agent_player import AgentPlayer
-from experience_buffer import ExperienceBuffer
 from experience_unroller import ExperienceUnroller
 from tensorboardX import SummaryWriter
 
-exp_capacity = 10000
-initial_exp_gathering = 5000
-target_sync_interval = 3000
 evaluation_interval = 2000
 
-epsilon_initial = 0.01
-epsilon_final = 0.01
-epsilon_decay_time = 200000
-epsilon_decay_amount = epsilon_initial - epsilon_final
-
-batch_size = 16
+batch_size = 32
 GAMMA = 0.99
-learning_rate = 0.0001
-GRAD_CLIP = 5
-EXP_UNROLL_STEPS = 0
-
-PRIO_ALPHA = 0.6
-PRIO_BETA_INITIAL = 0.4
-PRIO_BETA_RISE_TIME = 100000
+learning_rate = 0.001
+GRAD_CLIP = 0.5
+EXP_UNROLL_STEPS = 4
 
 EVAL_GAMES = 10
+ENT_BETA = 0.01
 
 def silentPlayout(game):
     turn = 0
@@ -61,7 +49,7 @@ def playSomeRandomGames(game):
 
 
 def playAndPrintEpisode(player, eps = 0.1):
-    s, a, r, e, _ = player.playEpisode(eps)
+    s, a, r, e, _ = player.playEpisode()
     game = player.game
 
     for i in range(0,len(s)):
@@ -82,7 +70,7 @@ def playSomeGames(game, net, count):
     minTotal = 2**30
     maxTotal = 0
     for i in range(count):
-        agent.playEpisode(0)
+        agent.playEpisode()
         avgScore += game.score
         maxScore = max(maxScore, game.score)
         minScore = min(minScore, game.score)
@@ -93,8 +81,7 @@ def playSomeGames(game, net, count):
     return minScore, avgScore / count, maxScore, minTotal, avgTotal / count, maxTotal
 
 
-def playAndLearn(agentNet, targetNet, player):
-    expBuffer = ExperienceBuffer(exp_capacity, PRIO_ALPHA)
+def playAndLearn(agentNet, player):
     expUnroller = ExperienceUnroller(EXP_UNROLL_STEPS, GAMMA)
     qGamma = GAMMA ** (EXP_UNROLL_STEPS + 1)
     device = AgentNet.device
@@ -104,29 +91,36 @@ def playAndLearn(agentNet, targetNet, player):
     reportInterval = 2000
 
     sampleCountTotal = 0
-    sampleLastReport = initial_exp_gathering
+    sampleLastReport = 0
     episodeCountTotal = 0
     timeLastReport = time.perf_counter()
-    epsilon = epsilon_initial
-    beta = PRIO_BETA_INITIAL
 
-    lossFunc = torch.nn.MSELoss()
-    optim = torch.optim.Adam(agentNet.parameters(), lr=learning_rate)
+    mseFunc = torch.nn.MSELoss()
+    logSoftMaxFunc = torch.nn.LogSoftmax(dim=1)
+    softMaxFunc = torch.nn.Softmax(dim=1)
+    optim = torch.optim.Adam(agentNet.parameters(), lr=learning_rate, eps=1e-3)
 
     lossAcc = 0
+    lossPolicyAcc = 0
+    lossValueAcc = 0
+    lossEntropyAcc = 0
+    gradL2Acc = 0
+    gradMaxAcc = 0
+    gradVarAcc = 0
     lossCnt = 0
     epLen = 0
     episodeLengths = collections.deque(maxlen=20)
     evalScMin = evalScAvg = evalScMax = evalToMin = evalToAvg = evalToMax = 0
 
+    states = []
+    actions = []
+    rewards = []
+    nonTermIdxs = []
+    nextStates = []
+
     try:
         while True:
-            if sampleCountTotal > initial_exp_gathering:
-                part = min(1.0, (sampleCountTotal - initial_exp_gathering) / epsilon_decay_time)
-                epsilon = epsilon_initial - epsilon_decay_amount * part
-                beta = min(1.0, PRIO_BETA_INITIAL + (1 - PRIO_BETA_INITIAL) * (sampleCountTotal - initial_exp_gathering) / PRIO_BETA_RISE_TIME)
-            
-            s, a, r, term, s1 = player.makeTurn(epsilon)
+            s, a, r, term, s1 = player.makeTurn()
             sampleCountTotal += 1
             epLen += 1
 
@@ -138,11 +132,12 @@ def playAndLearn(agentNet, targetNet, player):
             
             s, a, r, term, s1 = expUnroller.add(s, a, r, term, s1)
             if s is not None:
-                expBuffer.add(s, a, r, term, s1)
-            
-            if expBuffer.count() < initial_exp_gathering:
-                timeLastReport = time.perf_counter()
-                continue
+                states.append(s)
+                actions.append(a)
+                rewards.append(r)
+                if not term:
+                    nonTermIdxs.append(len(states) - 1)
+                    nextStates.append(s1)
             
             if sampleCountTotal - sampleLastReport > reportInterval:
                 timeCur = time.perf_counter()
@@ -151,14 +146,19 @@ def playAndLearn(agentNet, targetNet, player):
                 sampleLastReport += reportInterval
                 epLengthAvg = np.mean(episodeLengths)
 
-                writer.add_scalar('Training/Eps', epsilon, sampleCountTotal)
                 writer.add_scalar('Training/Speed', speed, sampleCountTotal)
                 writer.add_scalar('Training/Episode Length', epLengthAvg, sampleCountTotal)
                 if lossCnt > 0:
                     writer.add_scalar('Training/Loss', lossAcc/lossCnt, sampleCountTotal)
+                    writer.add_scalar('Training/Loss Value', lossValueAcc/lossCnt, sampleCountTotal)
+                    writer.add_scalar('Training/Loss Policy', lossPolicyAcc/lossCnt, sampleCountTotal)
+                    writer.add_scalar('Training/Loss Entropy', lossEntropyAcc/lossCnt, sampleCountTotal)
+                    writer.add_scalar('Training/Grad L2', gradL2Acc/lossCnt, sampleCountTotal)
+                    writer.add_scalar('Training/Grad Max', gradMaxAcc/lossCnt, sampleCountTotal)
+                    writer.add_scalar('Training/Grad Var', gradVarAcc/lossCnt, sampleCountTotal)
 
                 print(f'Played {sampleLastReport} steps ({episodeCountTotal} episodes) ({speed:8.2f} samples/s): Average steps {epLengthAvg:7.2f}, Evaluation score {evalScMin:2}, {evalScAvg:4.1f}, {evalScMax:2}, total {evalToMin:5}, {evalToAvg:7.1f}, {evalToMax:5}')
-                lossAcc = lossCnt = 0
+                lossAcc = lossValueAcc = lossPolicyAcc = lossEntropyAcc = gradL2Acc = gradMaxAcc = gradVarAcc = lossCnt = 0
             
             if sampleCountTotal % evaluation_interval == 0:
                 evalScMin, evalScAvg, evalScMax, evalToMin, evalToAvg, evalToMax = playSomeGames(Game2048(), agentNet, EVAL_GAMES)
@@ -170,43 +170,57 @@ def playAndLearn(agentNet, targetNet, player):
                 writer.add_scalar('Evaluation/Eval Total Score Min', evalToMin, sampleCountTotal)
                 writer.add_scalar('Evaluation/Eval Total Score Max', evalToMax, sampleCountTotal)
 
-            if sampleCountTotal % target_sync_interval == 0:
-                targetNet.load_state_dict(agentNet.state_dict())
-
-            if sampleCountTotal % 2 == 0:
+            if len(states) < batch_size:
                 continue
+            
+            states_t = agentNet.prepareInputs(np.array(states, copy=False))
+            actions_t = torch.LongTensor(actions).to(device)
 
+            rewards_np = np.array(rewards, dtype=np.float32)
+            if nonTermIdxs:
+                nextStates_t = agentNet.prepareInputs(np.array(nextStates, copy=False))
+                nextStateVals_t = agentNet(nextStates_t)[1]
+                rewards_np[nonTermIdxs] += qGamma * nextStateVals_t.data.cpu().numpy()[:,0]
+            
+            refVals_t = torch.from_numpy(rewards_np).to(device)
+            
             optim.zero_grad()
+            logits_t, value_t = agentNet(states_t)
 
-            states, actions, rewards, terms, newStates, idxs, weights = expBuffer.sample(batch_size, beta)
+            lossValue_t = mseFunc(value_t.squeeze(1), refVals_t)
 
-            states_t = agentNet.prepareInputs(states)
-            newStates_t = agentNet.prepareInputs(newStates)
-            actions_t = torch.from_numpy(actions).to(device)
-            rewards_t = torch.from_numpy(rewards).to(device)
-            terms_t = torch.from_numpy(terms).to(device)
-            weights_t = torch.from_numpy(weights).to(device)
+            logProb_t = logSoftMaxFunc(logits_t)
+            adv_t = refVals_t - value_t.detach()
+            logProbActions_t = adv_t * logProb_t[range(batch_size), actions_t]
+            lossPolicy_t = -logProbActions_t.mean()
 
-            stateActionQs = agentNet(states_t)
-            stateActionQs = torch.gather(stateActionQs, 1, actions_t.unsqueeze(-1)).squeeze(-1)
+            prob_t = softMaxFunc(logits_t)
+            lossEntropy_t = ENT_BETA * (prob_t * logProb_t).sum(dim=1).mean()
 
-            nextActions = agentNet(newStates_t).max(1)[1]
-            nextStateQs = targetNet(newStates_t).gather(1, nextActions.unsqueeze(-1)).squeeze(-1)
-            nextStateQs[terms_t] = 0.0
-            nextStateQs = nextStateQs.detach()
-
-            totalRewards_t = nextStateQs * qGamma + rewards_t
-            losses_t = weights_t * (stateActionQs - totalRewards_t) ** 2
-            loss = losses_t.mean()
-
-            loss.backward()
+            lossPolicy_t.backward(retain_graph=True)
+            grads = np.concatenate([p.grad.data.cpu().numpy().flatten()
+                for p in agentNet.parameters()
+                if p.grad is not None])
+            loss_t = lossValue_t + lossEntropy_t
+            loss_t.backward()
 
             torch.nn.utils.clip_grad_norm_(agentNet.parameters(), GRAD_CLIP)
             optim.step()
-            expBuffer.updatePriorities(idxs, losses_t.data.cpu().numpy() + 1e-5)
 
-            lossAcc += loss.item()
+            lossAcc += loss_t.item()
+            lossValueAcc += lossValue_t.item()
+            lossPolicyAcc += lossPolicy_t.item()
+            lossEntropyAcc += lossEntropy_t.item()
+            gradL2Acc += np.sqrt(np.mean(np.square(grads)))
+            gradMaxAcc += np.max(np.abs(grads))
+            gradVarAcc += np.var(grads)
             lossCnt += 1
+
+            states.clear()
+            actions.clear()
+            rewards.clear()
+            nonTermIdxs.clear()
+            nextStates.clear()
 
     except KeyboardInterrupt:
         print(f'Playing stopped after {sampleCountTotal} steps ({episodeCountTotal} episodes).')
@@ -261,15 +275,12 @@ if __name__ == '__main__':
     # exit()
 
     agentNet = AgentNet()
-    loadModel(agentNet, '2021-04-18_17-43-54 SC 2674000')
-
-    targetNet = AgentNet()
-    targetNet.load_state_dict(agentNet.state_dict())
+    #loadModel(agentNet, '2021-04-18_17-43-54 SC 2674000')
 
     player = AgentPlayer(agentNet, game)
 
     #playAndPrintEpisode(player, 0)
 
-    playAndLearn(agentNet, targetNet, player)
+    playAndLearn(agentNet, player)
     
     print('Done!')
