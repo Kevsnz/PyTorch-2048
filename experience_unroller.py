@@ -38,4 +38,12 @@ class ExperienceUnroller:
         self.terminals.append(t)
         return sr, ar, rr, tr, s1
 
+
+    def clear(self):
+        if self.stepCount > 0:
+            self.states.clear()
+            self.actions.clear()
+            self.rewards.clear()
+            self.terminals.clear()
+
         
