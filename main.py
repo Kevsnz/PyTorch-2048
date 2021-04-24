@@ -14,10 +14,10 @@ from tensorboardX import SummaryWriter
 
 evaluation_interval = 2000
 
-batch_size = 32
+BATCH_SIZE = 128
 GAMMA = 0.99
 learning_rate = 0.001
-GRAD_CLIP = 0.5
+GRAD_CLIP = 0.1
 EXP_UNROLL_STEPS = 4
 
 EVAL_GAMES = 10
@@ -70,7 +70,7 @@ def playSomeGames(game, net, count):
     minTotal = 2**30
     maxTotal = 0
     for i in range(count):
-        agent.playEpisode()
+        agent.playEpisode(True)
         avgScore += game.score
         maxScore = max(maxScore, game.score)
         minScore = min(minScore, game.score)
@@ -95,9 +95,9 @@ def playAndLearn(agentNet, player):
     episodeCountTotal = 0
     timeLastReport = time.perf_counter()
 
-    mseFunc = torch.nn.MSELoss()
-    logSoftMaxFunc = torch.nn.LogSoftmax(dim=1)
-    softMaxFunc = torch.nn.Softmax(dim=1)
+    mseFunc = torch.nn.MSELoss().to(device)
+    logSoftMaxFunc = torch.nn.LogSoftmax(dim=1).to(device)
+    softMaxFunc = torch.nn.Softmax(dim=1).to(device)
     optim = torch.optim.Adam(agentNet.parameters(), lr=learning_rate, eps=1e-3)
 
     lossAcc = 0
@@ -170,7 +170,7 @@ def playAndLearn(agentNet, player):
                 writer.add_scalar('Evaluation/Eval Total Score Min', evalToMin, sampleCountTotal)
                 writer.add_scalar('Evaluation/Eval Total Score Max', evalToMax, sampleCountTotal)
 
-            if len(states) < batch_size:
+            if len(states) < BATCH_SIZE:
                 continue
             
             states_t = agentNet.prepareInputs(np.array(states, copy=False))
@@ -180,37 +180,37 @@ def playAndLearn(agentNet, player):
             if nonTermIdxs:
                 nextStates_t = agentNet.prepareInputs(np.array(nextStates, copy=False))
                 nextStateVals_t = agentNet(nextStates_t)[1]
-                rewards_np[nonTermIdxs] += qGamma * nextStateVals_t.data.cpu().numpy()[:,0]
+                rewards_np[nonTermIdxs] += qGamma * nextStateVals_t.data.cpu().numpy()[:, 0]
             
             refVals_t = torch.from_numpy(rewards_np).to(device)
             
             optim.zero_grad()
             logits_t, value_t = agentNet(states_t)
 
-            lossValue_t = mseFunc(value_t.squeeze(1), refVals_t)
+            lossValue_t = mseFunc(value_t.squeeze(-1), refVals_t)
 
             logProb_t = logSoftMaxFunc(logits_t)
-            adv_t = refVals_t - value_t.detach()
-            logProbActions_t = adv_t * logProb_t[range(batch_size), actions_t]
+            adv_t = refVals_t - value_t.squeeze(-1)
+            logProbActions_t = adv_t.detach() * logProb_t[range(BATCH_SIZE), actions_t.squeeze(-1)]
             lossPolicy_t = -logProbActions_t.mean()
 
             prob_t = softMaxFunc(logits_t)
-            lossEntropy_t = ENT_BETA * (prob_t * logProb_t).sum(dim=1).mean()
+            lossEntropy_t = -ENT_BETA * (prob_t * logProb_t).sum(dim=1).mean()
 
             lossPolicy_t.backward(retain_graph=True)
             grads = np.concatenate([p.grad.data.cpu().numpy().flatten()
                 for p in agentNet.parameters()
                 if p.grad is not None])
-            loss_t = lossValue_t + lossEntropy_t
+            loss_t = lossValue_t * 0.5 - lossEntropy_t
             loss_t.backward()
 
             torch.nn.utils.clip_grad_norm_(agentNet.parameters(), GRAD_CLIP)
             optim.step()
 
-            lossAcc += loss_t.item()
+            lossAcc += loss_t.item() + lossPolicy_t.item()
             lossValueAcc += lossValue_t.item()
             lossPolicyAcc += lossPolicy_t.item()
-            lossEntropyAcc += lossEntropy_t.item()
+            lossEntropyAcc += lossEntropy_t.item() / ENT_BETA
             gradL2Acc += np.sqrt(np.mean(np.square(grads)))
             gradMaxAcc += np.max(np.abs(grads))
             gradVarAcc += np.var(grads)
@@ -221,6 +221,7 @@ def playAndLearn(agentNet, player):
             rewards.clear()
             nonTermIdxs.clear()
             nextStates.clear()
+            expUnroller.clear()
 
     except KeyboardInterrupt:
         print(f'Playing stopped after {sampleCountTotal} steps ({episodeCountTotal} episodes).')
