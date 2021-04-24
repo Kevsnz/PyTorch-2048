@@ -87,9 +87,9 @@ class Game2048:
             for j in range(2, -1, -1): # from right to left
                 score, valid = self.sweepRight(i, j) # sweep to the right
                 turnScore += score
+                self.totalScore += 2 ** score
                 isValidMove = isValidMove or valid
 
-        self.totalScore += turnScore
         self.swipeCount += 1
 
         # Unflip board back to original orientation
@@ -108,7 +108,7 @@ class Game2048:
         
         gameOver = self.placeNewNumber()
         if gameOver:
-            return -11, True, True
+            return turnScore, True, True
         return turnScore, False, True
 
 
@@ -134,9 +134,7 @@ class Game2048:
             if self.score < self.board[i][j+1]:
                 self.score = self.board[i][j+1].item()
             
-            score = 2**self.board[i][j+1].item()
-            #score2, _ = self.sweepRight(i, j+1)
-            #return score + score2, True
+            score = self.board[i][j+1].item()
             return score, True
         
         return 0, False
