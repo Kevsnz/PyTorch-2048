@@ -18,16 +18,16 @@ initial_exp_gathering = 5000
 target_sync_interval = 3000
 evaluation_interval = 2000
 
-epsilon_initial = 0.01
+epsilon_initial = 1.0
 epsilon_final = 0.01
-epsilon_decay_time = 200000
+epsilon_decay_time = 100000
 epsilon_decay_amount = epsilon_initial - epsilon_final
 
 batch_size = 16
 GAMMA = 0.99
-learning_rate = 0.0001
+learning_rate = 0.0002
 GRAD_CLIP = 5
-EXP_UNROLL_STEPS = 0
+EXP_UNROLL_STEPS = 2
 
 PRIO_ALPHA = 0.6
 PRIO_BETA_INITIAL = 0.4
@@ -82,7 +82,7 @@ def playSomeGames(game, net, count):
     minTotal = 2**30
     maxTotal = 0
     for i in range(count):
-        agent.playEpisode(0)
+        agent.playEpisode(True, 0)
         avgScore += game.score
         maxScore = max(maxScore, game.score)
         minScore = min(minScore, game.score)
@@ -261,7 +261,7 @@ if __name__ == '__main__':
     # exit()
 
     agentNet = AgentNet()
-    loadModel(agentNet, '2021-04-18_17-43-54 SC 2674000')
+    #loadModel(agentNet, '2021-04-18_17-43-54 SC 2674000')
 
     targetNet = AgentNet()
     targetNet.load_state_dict(agentNet.state_dict())

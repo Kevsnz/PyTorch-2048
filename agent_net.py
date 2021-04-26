@@ -32,7 +32,8 @@ class AgentNet(torch.nn.Module):
         x = self.netPre(x.view(x.size()[0], -1))
         val = self.netVal(x)
         adv = self.netAdv(x)
-        return val + adv - adv.mean()
+        mean = adv.mean(dim=1, keepdim=True)
+        return val + (adv - mean)
 
     # convert a batch of 4x4 boards to NN input batch
     def prepareInputs(self, boards: np.ndarray):
