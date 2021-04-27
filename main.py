@@ -14,6 +14,7 @@ from tensorboardX import SummaryWriter
 
 evaluation_interval = 2000
 
+ENV_COUNT = 50
 BATCH_SIZE = 128
 GAMMA = 0.99
 learning_rate = 0.001
@@ -21,7 +22,7 @@ GRAD_CLIP = 0.1
 EXP_UNROLL_STEPS = 4
 
 EVAL_GAMES = 10
-ENT_BETA = 0.01
+ENT_BETA = 0.002
 
 def silentPlayout(game):
     turn = 0
@@ -81,8 +82,13 @@ def playSomeGames(game, net, count):
     return minScore, avgScore / count, maxScore, minTotal, avgTotal / count, maxTotal
 
 
-def playAndLearn(agentNet, player):
-    expUnroller = ExperienceUnroller(EXP_UNROLL_STEPS, GAMMA)
+def playAndLearn(agentNet, games):
+    if isinstance(games, Game2048):
+        games = [games]
+    
+    envCount = len(games)
+    players = [AgentPlayer(agentNet, game) for game in games]
+    expUnrollers = [ExperienceUnroller(EXP_UNROLL_STEPS, GAMMA) for _ in range(envCount)]
     qGamma = GAMMA ** (EXP_UNROLL_STEPS + 1)
     device = AgentNet.device
 
@@ -108,7 +114,6 @@ def playAndLearn(agentNet, player):
     gradMaxAcc = 0
     gradVarAcc = 0
     lossCnt = 0
-    epLen = 0
     episodeLengths = collections.deque(maxlen=20)
     evalScMin = evalScAvg = evalScMax = evalToMin = evalToAvg = evalToMax = 0
 
@@ -117,20 +122,19 @@ def playAndLearn(agentNet, player):
     rewards = []
     nonTermIdxs = []
     nextStates = []
+    curEnv = 0
 
     try:
         while True:
-            s, a, r, term, s1 = player.makeTurn()
+            s, a, r, term, s1 = players[curEnv].makeTurn()
             sampleCountTotal += 1
-            epLen += 1
 
             if term:
                 episodeCountTotal += 1
-                episodeLengths.append(epLen)
-                epLen = 0
-                game.reset()
+                episodeLengths.append(players[curEnv].game.swipeCount)
+                players[curEnv].game.reset()
             
-            s, a, r, term, s1 = expUnroller.add(s, a, r, term, s1)
+            s, a, r, term, s1 = expUnrollers[curEnv].add(s, a, r, term, s1)
             if s is not None:
                 states.append(s)
                 actions.append(a)
@@ -138,6 +142,7 @@ def playAndLearn(agentNet, player):
                 if not term:
                     nonTermIdxs.append(len(states) - 1)
                     nextStates.append(s1)
+            curEnv = (curEnv + 1) % envCount
             
             if sampleCountTotal - sampleLastReport > reportInterval:
                 timeCur = time.perf_counter()
@@ -201,7 +206,7 @@ def playAndLearn(agentNet, player):
             grads = np.concatenate([p.grad.data.cpu().numpy().flatten()
                 for p in agentNet.parameters()
                 if p.grad is not None])
-            loss_t = lossValue_t * 0.5 - lossEntropy_t
+            loss_t = lossValue_t * 0.002 - lossEntropy_t
             loss_t.backward()
 
             torch.nn.utils.clip_grad_norm_(agentNet.parameters(), GRAD_CLIP)
@@ -221,7 +226,7 @@ def playAndLearn(agentNet, player):
             rewards.clear()
             nonTermIdxs.clear()
             nextStates.clear()
-            expUnroller.clear()
+            #expUnroller.clear()
 
     except KeyboardInterrupt:
         print(f'Playing stopped after {sampleCountTotal} steps ({episodeCountTotal} episodes).')
@@ -278,10 +283,9 @@ if __name__ == '__main__':
     agentNet = AgentNet()
     #loadModel(agentNet, '2021-04-18_17-43-54 SC 2674000')
 
-    player = AgentPlayer(agentNet, game)
-
+    #player = AgentPlayer(agentNet, game)
     #playAndPrintEpisode(player, 0)
 
-    playAndLearn(agentNet, player)
+    playAndLearn(agentNet, [Game2048() for _ in range(ENV_COUNT)])
     
     print('Done!')
